@@ -1,0 +1,60 @@
+plugins {
+    id 'com.android.application'
+}
+
+def resolvedAppUrl = project.hasProperty('APP_URL') ? project.property('APP_URL').toString() : 'https://salikurvouch.vercel.app'
+def keystorePath = project.hasProperty('KEYSTORE_FILE') ? project.property('KEYSTORE_FILE').toString() : 'keystore.jks'
+def keystorePass = project.hasProperty('KEYSTORE_PASSWORD') ? project.property('KEYSTORE_PASSWORD').toString() : 'salikurvouch123'
+def keyAliasName = project.hasProperty('KEY_ALIAS') ? project.property('KEY_ALIAS').toString() : 'salikurvouch'
+def keyPass = project.hasProperty('KEY_PASSWORD') ? project.property('KEY_PASSWORD').toString() : 'salikurvouch123'
+
+android {
+    namespace 'net.salikur.vouch'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "net.salikur.vouch"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "1.0.0"
+
+        buildConfigField "String", "APP_URL", "\"${resolvedAppUrl}\""
+    }
+
+    signingConfigs {
+        release {
+            def ksFile = file(keystorePath)
+            if (ksFile.exists()) {
+                storeFile ksFile
+                storePassword keystorePass
+                keyAlias keyAliasName
+                keyPassword keyPass
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (file(keystorePath).exists()) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
+}

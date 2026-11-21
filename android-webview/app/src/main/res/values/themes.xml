@@ -1,0 +1,8 @@
+<resources>
+    <style name="Theme.SalikurVouch" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="colorPrimary">#2563EB</item>
+        <item name="colorPrimaryDark">#1D4ED8</item>
+        <item name="colorAccent">#2563EB</item>
+        <item name="android:statusBarColor">#1E293B</item>
+    </style>
+</resources>

@@ -1,0 +1,94 @@
+name: Build Android APK (WebView)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "android-webview/**"
+      - ".github/workflows/build-apk.yml"
+  workflow_dispatch:
+    inputs:
+      app_url:
+        description: "Production URL aplikasi SalikurVouch (contoh: https://salikurvouch.vercel.app)"
+        required: true
+        default: "https://salikurvouch.vercel.app"
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    name: Build & Publish SalikurVouch.apk
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Gradle 8.7
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
+
+      - name: Prepare Release Keystore
+        working-directory: android-webview/app
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > keystore.jks
+          else
+            keytool -genkeypair -v \
+              -keystore keystore.jks \
+              -storepass "${KEYSTORE_PASSWORD:-salikurvouch123}" \
+              -keypass "${KEY_PASSWORD:-salikurvouch123}" \
+              -alias "${KEY_ALIAS:-salikurvouch}" \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=SalikurVouch, OU=Ops, O=SalikurNet, L=Indonesia, C=ID"
+          fi
+
+      - name: Build Signed Release APK
+        working-directory: android-webview
+        env:
+          INPUT_APP_URL: ${{ github.event.inputs.app_url }}
+          VAR_APP_URL: ${{ vars.APP_URL }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          TARGET_URL="${INPUT_APP_URL:-${VAR_APP_URL:-https://salikurvouch.vercel.app}}"
+          echo "Building APK for URL: $TARGET_URL"
+          gradle assembleRelease \
+            -PAPP_URL="$TARGET_URL" \
+            -PKEYSTORE_FILE="keystore.jks" \
+            -PKEYSTORE_PASSWORD="${KEYSTORE_PASSWORD:-salikurvouch123}" \
+            -PKEY_ALIAS="${KEY_ALIAS:-salikurvouch}" \
+            -PKEY_PASSWORD="${KEY_PASSWORD:-salikurvouch123}"
+          cp app/build/outputs/apk/release/app-release.apk SalikurVouch.apk
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SalikurVouch-APK
+          path: android-webview/SalikurVouch.apk
+
+      - name: Publish APK to GitHub Release (latest)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0-apk
+          name: SalikurVouch Android APK (WebView)
+          body: |
+            Aplikasi Android WebView resmi untuk panel admin **SalikurVouch**.
+            - URL Target: `${{ github.event.inputs.app_url || vars.APP_URL || 'https://salikurvouch.vercel.app' }}`
+            - Diunduh otomatis melalui tombol **Download APK** di halaman `/login`.
+          make_latest: true
+          files: android-webview/SalikurVouch.apk

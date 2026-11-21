@@ -34,3 +34,9 @@ next-env.d.ts
 *.db
 *.sqlite
 *.sqlite3
+
+# android build artifacts & signing keys
+android-webview/.gradle/
+android-webview/**/build/
+*.jks
+*.keystore
