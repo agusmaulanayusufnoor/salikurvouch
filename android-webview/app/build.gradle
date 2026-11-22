@@ -2,7 +2,7 @@ plugins {
     id 'com.android.application'
 }
 
-def resolvedAppUrl = project.hasProperty('APP_URL') ? project.property('APP_URL').toString() : 'https://salikurvouch.vercel.app'
+def resolvedAppUrl = project.hasProperty('APP_URL') ? project.property('APP_URL').toString() : 'https://app.salikur.net'
 def keystorePath = project.hasProperty('KEYSTORE_FILE') ? project.property('KEYSTORE_FILE').toString() : 'keystore.jks'
 def keystorePass = project.hasProperty('KEYSTORE_PASSWORD') ? project.property('KEYSTORE_PASSWORD').toString() : 'salikurvouch123'
 def keyAliasName = project.hasProperty('KEY_ALIAS') ? project.property('KEY_ALIAS').toString() : 'salikurvouch'

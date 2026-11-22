@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       app_url:
-        description: "Production URL aplikasi SalikurVouch (contoh: https://salikurvouch.vercel.app)"
+        description: "Production URL aplikasi SalikurVouch (contoh: https://app.salikur.net)"
         required: true
-        default: "https://salikurvouch.vercel.app"
+        default: "https://app.salikur.net"
         type: string
 
 permissions:
@@ -65,7 +65,7 @@ jobs:
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          TARGET_URL="${INPUT_APP_URL:-${VAR_APP_URL:-https://salikurvouch.vercel.app}}"
+          TARGET_URL="${INPUT_APP_URL:-${VAR_APP_URL:-https://app.salikur.net}}"
           echo "Building APK for URL: $TARGET_URL"
           gradle assembleRelease \
             -PAPP_URL="$TARGET_URL" \
@@ -88,7 +88,7 @@ jobs:
           name: SalikurVouch Android APK (WebView)
           body: |
             Aplikasi Android WebView resmi untuk panel admin **SalikurVouch**.
-            - URL Target: `${{ github.event.inputs.app_url || vars.APP_URL || 'https://salikurvouch.vercel.app' }}`
+            - URL Target: `${{ github.event.inputs.app_url || vars.APP_URL || 'https://app.salikur.net' }}`
             - Diunduh otomatis melalui tombol **Download APK** di halaman `/login`.
           make_latest: true
           files: android-webview/SalikurVouch.apk
