@@ -42,33 +42,34 @@
 :root {
   --radius: 0.625rem;
   /* Default Warm Coastal Palette: #FFEFD2, #6AB0AF, #F5A89A, #FFF2A5 */
+  /* Harmonious non-black typography: Deep Ocean Teal & Warm Ivory */
   --background: #fff6e5;
-  --foreground: #1b3131;
+  --foreground: #235b5b;
   --card: #fffdf9;
-  --card-foreground: #1b3131;
+  --card-foreground: #235b5b;
   --popover: #fffdf9;
-  --popover-foreground: #1b3131;
-  --primary: #3b8685;
-  --primary-foreground: #fffdf9;
+  --popover-foreground: #235b5b;
+  --primary: #4c9594;
+  --primary-foreground: #fffdf8;
   --secondary: #ffefd2;
-  --secondary-foreground: #274444;
+  --secondary-foreground: #2b6362;
   --muted: #f9ead0;
-  --muted-foreground: #506c6b;
+  --muted-foreground: #588281;
   --accent: #fff2a5;
-  --accent-foreground: #3a3110;
-  --destructive: #d46253;
-  --destructive-foreground: #fffdf9;
+  --accent-foreground: #6b5220;
+  --destructive: #d96b5c;
+  --destructive-foreground: #fffdf8;
   --border: #ead7b7;
   --input: #e2cca6;
   --ring: #6ab0af;
-  /* Coastal Teal Sidebar (#6AB0AF) with Warm Cream (#FFEFD2) active state */
-  --sidebar: #6ab0af;
-  --sidebar-foreground: #122c2c;
+  /* Coastal Teal Sidebar with Warm Cream-White typography (zero black) */
+  --sidebar: #539998;
+  --sidebar-foreground: #fffdf7;
   --sidebar-primary: #ffefd2;
-  --sidebar-primary-foreground: #143232;
-  --sidebar-accent: #7ec0bf;
-  --sidebar-accent-foreground: #102626;
-  --sidebar-border: #5a9e9d;
+  --sidebar-primary-foreground: #235b5b;
+  --sidebar-accent: #6ab0af;
+  --sidebar-accent-foreground: #fffdf7;
+  --sidebar-border: #6ab0af;
   --sidebar-ring: #ffefd2;
 }
 

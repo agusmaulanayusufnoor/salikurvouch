@@ -13,9 +13,9 @@ const badgeVariants = cva(
           "border-transparent bg-destructive text-destructive-foreground",
         outline: "text-foreground",
         success:
-          "border-[#6AB0AF]/50 bg-[#6AB0AF]/20 text-[#1F5453] dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
+          "border-[#6AB0AF]/55 bg-[#6AB0AF]/20 text-[#235B5B] dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
         warning:
-          "border-[#E5CF6E] bg-[#FFF2A5] text-[#5B490E] dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300",
+          "border-[#E5CF6E] bg-[#FFF2A5] text-[#6B5220] dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300",
       },
     },
     defaultVariants: {
