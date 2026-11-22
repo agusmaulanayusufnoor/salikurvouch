@@ -7,6 +7,7 @@ import {
   Search,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getActiveServer } from "@/lib/server-context";
 import { formatDateTimeID, formatIDR } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,7 +52,10 @@ export default async function VoucherHistoryPage({
   const to = sp.to || "";
   const q = sp.q?.trim() || "";
 
-  const supabase = await createClient();
+  const [supabase, activeServer] = await Promise.all([
+    createClient(),
+    getActiveServer(),
+  ]);
 
   let query = supabase
     .from("wallet_transactions")
@@ -59,6 +63,7 @@ export default async function VoucherHistoryPage({
       "id, reseller_id, telegram_id, seller_name, tx_type, amount, voucher_price, markup_amount, balance_before, balance_after, voucher_username, voucher_profile, status, notes, created_at",
       { count: "exact" }
     )
+    .eq("server_id", activeServer?.id ?? "")
     .order("created_at", { ascending: false })
     .range((page - 1) * pageSize, page * pageSize - 1);
 

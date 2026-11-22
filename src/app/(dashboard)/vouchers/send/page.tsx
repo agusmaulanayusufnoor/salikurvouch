@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getActiveServer } from "@/lib/server-context";
 import { SendVoucherClient } from "./send-client";
 
 export const metadata = {
@@ -6,12 +7,17 @@ export const metadata = {
 };
 
 export default async function SendVoucherPage() {
-  const supabase = await createClient();
+  const [supabase, activeServer] = await Promise.all([
+    createClient(),
+    getActiveServer(),
+  ]);
+  const serverId = activeServer?.id ?? "";
 
   const [resellersRes, packagesRes] = await Promise.all([
     supabase
       .from("resellers")
       .select("id, telegram_id, username, balance")
+      .eq("server_id", serverId)
       .eq("status", "active")
       .order("username", { ascending: true }),
     supabase
@@ -19,6 +25,7 @@ export default async function SendVoucherPage() {
       .select(
         "id, name, mode, price, markup, mikrotik_profile, limit_uptime, limit_total_mb"
       )
+      .eq("server_id", serverId)
       .eq("is_active", true)
       .order("sort_order", { ascending: true }),
   ]);

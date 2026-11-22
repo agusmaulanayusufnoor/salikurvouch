@@ -10,6 +10,7 @@ import {
   BarChart3,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getActiveServer } from "@/lib/server-context";
 import { formatIDR, formatDateTimeID } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,7 +38,11 @@ function getLast14DayWindow() {
 }
 
 export default async function DashboardPage() {
-  const supabase = await createClient();
+  const [supabase, activeServer] = await Promise.all([
+    createClient(),
+    getActiveServer(),
+  ]);
+  const serverId = activeServer?.id ?? "";
   const { fourteenDaysAgo, dayKeys } = getLast14DayWindow();
 
   const [
@@ -47,37 +52,42 @@ export default async function DashboardPage() {
     recentTxRes,
     trendTxRes,
     routerRes,
-    settingsRes,
   ] = await Promise.all([
-    supabase.from("resellers").select("balance, vouchers_sold, status"),
+    supabase
+      .from("resellers")
+      .select("balance, vouchers_sold, status")
+      .eq("server_id", serverId),
     supabase
       .from("wallet_transactions")
-      .select("*", { count: "exact", head: true }),
-    supabase.from("ppob_transactions").select("profit, sell_price, status"),
+      .select("*", { count: "exact", head: true })
+      .eq("server_id", serverId),
+    supabase
+      .from("ppob_transactions")
+      .select("profit, sell_price, status")
+      .eq("server_id", serverId),
     supabase
       .from("wallet_transactions")
       .select(
         "id, seller_name, tx_type, amount, voucher_price, balance_after, status, created_at"
       )
+      .eq("server_id", serverId)
       .order("created_at", { ascending: false })
       .limit(10),
     supabase
       .from("wallet_transactions")
       .select("voucher_price, created_at")
+      .eq("server_id", serverId)
       .eq("tx_type", "voucher_purchase")
       .eq("status", "success")
       .gte("created_at", fourteenDaysAgo)
       .limit(5000),
-    supabase
-      .from("routers")
-      .select("id, name, ros_version, connection_mode")
-      .limit(1)
-      .maybeSingle(),
-    supabase
-      .from("app_settings")
-      .select("bot_username, bot_mode, webhook_secret")
-      .eq("id", 1)
-      .maybeSingle(),
+    activeServer?.router_id
+      ? supabase
+          .from("routers")
+          .select("id, name, ros_version, connection_mode")
+          .eq("id", activeServer.router_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
   ]);
 
   const resellers = resellersRes.data ?? [];
@@ -123,15 +133,17 @@ export default async function DashboardPage() {
 
   const recentTx = recentTxRes.data ?? [];
   const routerConfigured = Boolean(routerRes.data);
-  const botConfigured = Boolean(settingsRes.data?.bot_username);
+  const botConfigured = Boolean(activeServer?.bot_username);
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight">Dashboard</h2>
+          <h2 className="text-2xl font-bold tracking-tight">
+            Dashboard — {activeServer?.name ?? "SalikurNet"}
+          </h2>
           <p className="text-sm text-muted-foreground">
-            Ringkasan operasional SalikurVouch (Voucher, Reseller &amp; Portal
+            Ringkasan operasional server aktif (Voucher, Reseller &amp; Portal
             Pulsa PPOB)
           </p>
         </div>
@@ -145,7 +157,7 @@ export default async function DashboardPage() {
           <Badge variant={botConfigured ? "success" : "warning"}>
             <Bot className="size-3" />
             {botConfigured
-              ? `@${settingsRes.data?.bot_username}`
+              ? `@${activeServer?.bot_username}`
               : "Bot Belum Dikonfigurasi"}
           </Badge>
         </div>
@@ -222,7 +234,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* Real-time MikroTik Status Panel */}
-      <LiveRouterPanel />
+      <LiveRouterPanel key={serverId || "default"} />
 
       {/* 14-day Sales Trend */}
       <Card>

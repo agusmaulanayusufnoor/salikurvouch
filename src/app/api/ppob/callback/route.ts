@@ -107,7 +107,7 @@ export async function POST(request: Request) {
     const { data: tx } = await admin
       .from("ppob_transactions")
       .select(
-        "id, trx_id, product_code, target_number, status, serial_number, telegram_id"
+        "id, server_id, trx_id, product_code, target_number, status, serial_number, telegram_id"
       )
       .eq("trx_id", trxId)
       .maybeSingle();
@@ -139,7 +139,7 @@ export async function POST(request: Request) {
       tx.status !== nextStatus &&
       (nextStatus === "SUCCESS" || nextStatus === "FAILED")
     ) {
-      const bot = await getBotTokenFromSettings();
+      const bot = await getBotTokenFromSettings(tx.server_id);
       if (bot?.token) {
         const icon = nextStatus === "SUCCESS" ? "✅" : "❌";
         const lines = [

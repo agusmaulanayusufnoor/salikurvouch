@@ -1,5 +1,6 @@
 import { decryptSecret, isEncryptedSecret } from "@/lib/crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getActiveServer } from "@/lib/server-context";
 import { RosBinaryApiAdapter } from "./ros-v6-api";
 import { RosV7RestAdapter } from "./ros-v7-rest";
 import type {
@@ -27,6 +28,16 @@ export function decryptRouterPassword(stored: string): string {
 export async function getRouterConfigFromDb(
   routerId?: string
 ): Promise<RouterConfig | null> {
+  let resolvedRouterId = routerId;
+  if (!resolvedRouterId) {
+    try {
+      const activeServer = await getActiveServer();
+      resolvedRouterId = activeServer.router_id ?? undefined;
+    } catch {
+      // Fall back to default router query below
+    }
+  }
+
   const admin = createAdminClient();
   let query = admin
     .from("routers")
@@ -35,8 +46,8 @@ export async function getRouterConfigFromDb(
     )
     .eq("is_active", true);
 
-  if (routerId) {
-    query = query.eq("id", routerId);
+  if (resolvedRouterId) {
+    query = query.eq("id", resolvedRouterId);
   } else {
     query = query.order("is_default", { ascending: false }).limit(1);
   }

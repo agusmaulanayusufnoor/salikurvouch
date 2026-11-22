@@ -1,5 +1,9 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import {
+  getActiveServer,
+  listAccessibleServers,
+} from "@/lib/server-context";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
 
 export default async function DashboardLayout({
@@ -26,6 +30,16 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
+  const staffRef = {
+    userId: user.id,
+    role: profile.role as "super_admin" | "admin" | "operator",
+  };
+
+  const [servers, activeServer] = await Promise.all([
+    listAccessibleServers(staffRef),
+    getActiveServer(undefined, staffRef),
+  ]);
+
   return (
     <DashboardShell
       user={{
@@ -34,6 +48,8 @@ export default async function DashboardLayout({
         fullName: profile.full_name,
         role: profile.role,
       }}
+      servers={servers}
+      activeServerId={activeServer.id}
     >
       {children}
     </DashboardShell>

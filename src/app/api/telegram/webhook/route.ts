@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { after, NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getDefaultServer } from "@/lib/server-context";
 import {
   handleTelegramUpdate,
   type TelegramUpdate,
@@ -15,18 +15,22 @@ function timingSafeCompare(a: string, b: string): boolean {
   return crypto.timingSafeEqual(bufA, bufB);
 }
 
+/**
+ * Backward-compatible webhook endpoint for the default server (server1).
+ * New servers should use `/api/telegram/webhook/[slug]`.
+ */
 export async function POST(request: Request) {
   const incomingSecret =
     request.headers.get("x-telegram-bot-api-secret-token") ?? "";
 
-  const admin = createAdminClient();
-  const { data: settings } = await admin
-    .from("app_settings")
-    .select("webhook_secret")
-    .eq("id", 1)
-    .maybeSingle();
+  let server;
+  try {
+    server = await getDefaultServer();
+  } catch {
+    return NextResponse.json({ error: "Default server not configured" }, { status: 500 });
+  }
 
-  const expectedSecret = settings?.webhook_secret ?? "";
+  const expectedSecret = server.webhook_secret ?? "";
   if (!expectedSecret || !timingSafeCompare(incomingSecret, expectedSecret)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -43,17 +47,21 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await handleTelegramUpdate(update, (bgTask) => {
-      after(async () => {
-        try {
-          await bgTask();
-        } catch (err) {
-          console.error("[telegram-webhook] background task error:", err);
-        }
-      });
-    });
+    const result = await handleTelegramUpdate(
+      update,
+      (bgTask) => {
+        after(async () => {
+          try {
+            await bgTask();
+          } catch (err) {
+            console.error("[telegram-webhook] background task error:", err);
+          }
+        });
+      },
+      server.id
+    );
 
-    return NextResponse.json({ ok: true, ...result });
+    return NextResponse.json({ ok: true, server: server.slug, ...result });
   } catch (err) {
     console.error("[telegram-webhook] error:", err);
     // Return 200 to prevent Telegram retry storm while logging server-side

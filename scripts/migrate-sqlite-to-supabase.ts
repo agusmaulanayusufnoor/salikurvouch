@@ -1,12 +1,13 @@
 #!/usr/bin/env tsx
 /**
  * SalikurVouch ETL Migration Script: SQLite (mibotam.db) + JSON Batches -> Supabase PostgreSQL
+ * Supports Multi-Server (v2.0) via --server-slug, --server-name, --exclude-telegram-ids.
  *
  * Usage:
- *   npm run migrate:sqlite -- --inspect
- *   npm run migrate:sqlite -- --dry-run
- *   npm run migrate:sqlite -- --db /path/to/mibotam.db --batches-dir /path/to/voucher_batches
- *   npm run migrate:sqlite -- --verify-only
+ *   npm run migrate:sqlite -- --inspect --db /path/to/mibotam.db
+ *   npm run migrate:sqlite -- --dry-run --server-slug server2 --server-name "SalikurNet 2" --db /path/to/mibotam.db
+ *   npm run migrate:sqlite -- --server-slug server2 --server-name "SalikurNet 2" --exclude-telegram-ids 979761904 --skip-admin-seed --db /path/to/mibotam.db --batches-dir /path/to/voucher_batches
+ *   npm run migrate:sqlite -- --verify-only --server-slug server2 --exclude-telegram-ids 979761904 --db /path/to/mibotam.db --batches-dir /path/to/voucher_batches
  */
 
 import fs from "node:fs";
@@ -37,6 +38,9 @@ interface CliOptions {
   dbPath: string;
   batchesDir: string;
   legacyKey: string;
+  serverSlug: string;
+  serverName: string | null;
+  excludeTelegramIds: Set<number>;
   dryRun: boolean;
   inspectOnly: boolean;
   verifyOnly: boolean;
@@ -53,6 +57,9 @@ function parseCliArgs(): CliOptions {
     dbPath: path.join(backupRoot, "config", "mibotam.db"),
     batchesDir: path.join(backupRoot, "config", "voucher_batches"),
     legacyKey: process.env.LEGACY_DECRYPT_KEY || "4ku4ll",
+    serverSlug: "server1",
+    serverName: null,
+    excludeTelegramIds: new Set<number>(),
     dryRun: false,
     inspectOnly: false,
     verifyOnly: false,
@@ -70,7 +77,18 @@ function parseCliArgs(): CliOptions {
     else if (arg === "--batches-dir" && args[i + 1])
       opts.batchesDir = args[++i];
     else if (arg === "--legacy-key" && args[i + 1]) opts.legacyKey = args[++i];
-    else if (arg === "--chunk-size" && args[i + 1])
+    else if (arg === "--server-slug" && args[i + 1])
+      opts.serverSlug = args[++i].trim().toLowerCase();
+    else if (arg === "--server-name" && args[i + 1])
+      opts.serverName = args[++i].trim();
+    else if (arg === "--exclude-telegram-ids" && args[i + 1]) {
+      for (const part of args[++i].split(",")) {
+        const n = Number(part.trim());
+        if (Number.isSafeInteger(n) && n !== 0) {
+          opts.excludeTelegramIds.add(n);
+        }
+      }
+    } else if (arg === "--chunk-size" && args[i + 1])
       opts.chunkSize = Math.max(50, Number(args[++i]) || 500);
   }
 
@@ -189,6 +207,8 @@ async function seedInitialAdmin(
 
 async function runReconciliation(
   supabase: SupabaseClient<SupabaseDatabase>,
+  serverId: string,
+  serverLabel: string,
   expected: {
     resellerCount: number;
     resellerBalanceSum: number;
@@ -200,18 +220,25 @@ async function runReconciliation(
     batchCount: number;
   }
 ) {
-  console.log("\n=== Verifikasi & Rekonsiliasi SQLite vs Supabase ===");
+  console.log(
+    `\n=== Verifikasi & Rekonsiliasi SQLite vs Supabase [${serverLabel}] ===`
+  );
 
   const [resellersRes, walletCountRes, ppobRes, batchCountRes] =
     await Promise.all([
-      supabase.from("resellers").select("balance"),
+      supabase.from("resellers").select("balance").eq("server_id", serverId),
       supabase
         .from("wallet_transactions")
-        .select("*", { count: "exact", head: true }),
-      supabase.from("ppob_transactions").select("profit"),
+        .select("*", { count: "exact", head: true })
+        .eq("server_id", serverId),
+      supabase
+        .from("ppob_transactions")
+        .select("profit")
+        .eq("server_id", serverId),
       supabase
         .from("voucher_batches")
-        .select("*", { count: "exact", head: true }),
+        .select("*", { count: "exact", head: true })
+        .eq("server_id", serverId),
     ]);
 
   if (resellersRes.error) throw resellersRes.error;
@@ -232,7 +259,7 @@ async function runReconciliation(
   );
   const pgBatchCount = batchCountRes.count ?? 0;
 
-  // Paginated sum for wallet_transactions (31k+ rows)
+  // Paginated sum for wallet_transactions (30k+ rows)
   let pgTopupSum = 0;
   let pgVoucherSuccessSum = 0;
   const pageSize = 1000;
@@ -240,6 +267,7 @@ async function runReconciliation(
     const { data, error } = await supabase
       .from("wallet_transactions")
       .select("tx_type, amount, voucher_price, status")
+      .eq("server_id", serverId)
       .order("id", { ascending: true })
       .range(from, from + pageSize - 1);
     if (error) throw error;
@@ -309,18 +337,24 @@ async function runReconciliation(
     }))
   );
 
-  const mismatches = checks.filter((c) => Math.abs(c.supabase - c.sqlite) >= 0.01);
+  const mismatches = checks.filter(
+    (c) => Math.abs(c.supabase - c.sqlite) >= 0.01
+  );
   if (mismatches.length > 0) {
     throw new Error(
       `Reconciliation failed with ${mismatches.length} mismatch(es)!`
     );
   }
 
-  console.log("✅ Rekonsiliasi 100% cocok (selisih Rp 0)!");
+  console.log(
+    `✅ Rekonsiliasi [${serverLabel}] 100% cocok (selisih Rp 0)!`
+  );
 }
 
 async function main() {
   const opts = parseCliArgs();
+  const isDefaultServer = opts.serverSlug === "server1";
+  const legacyIdSign = isDefaultServer ? 1 : -1;
 
   if (!fs.existsSync(opts.dbPath)) {
     console.error(`❌ SQLite database not found: ${opts.dbPath}`);
@@ -338,8 +372,16 @@ async function main() {
       return;
     }
 
-    console.log(`📂 Source SQLite: ${opts.dbPath}`);
+    console.log(`📂 Source SQLite : ${opts.dbPath}`);
     console.log(`📂 Source Batches: ${opts.batchesDir}`);
+    console.log(
+      `🏷  Target Server : slug=${opts.serverSlug} (name=${opts.serverName ?? "(auto)"}, default=${isDefaultServer})`
+    );
+    if (opts.excludeTelegramIds.size > 0) {
+      console.log(
+        `🚫 Excluded Resellers (telegram_id): ${Array.from(opts.excludeTelegramIds).join(", ")}`
+      );
+    }
     if (opts.dryRun) console.log("🧪 DRY-RUN MODE: no writes to Supabase.");
 
     // 1. Extract from SQLite
@@ -355,10 +397,16 @@ async function main() {
           .sort()
       : [];
 
-    // Transform resellers first to compute expected totals
-    const resellers = resellerRows
+    // Transform resellers first (filtering out excluded telegram_ids)
+    const allResellers = resellerRows
       .map(mapResellerRow)
       .filter((r): r is NonNullable<typeof r> => r !== null);
+    const resellers = allResellers.filter(
+      (r) => !opts.excludeTelegramIds.has(Number(r.telegram_id))
+    );
+    const skippedResellers = allResellers.filter((r) =>
+      opts.excludeTelegramIds.has(Number(r.telegram_id))
+    );
 
     const expectedResellerBalanceSum = resellers.reduce(
       (sum, r) => sum + Number(r.balance ?? 0),
@@ -404,12 +452,25 @@ async function main() {
 
     console.log("\n=== Extraction Summary ===");
     console.log(`- st_mikbotam rows       : ${stRows.length}`);
+    if (stRow) {
+      console.log(
+        `  router                 : ${pickString(stRow, ["Nama_router", "nama_router"])} @ ${pickString(stRow, ["IP_router", "ip_router"])}:${pickString(stRow, ["Port", "Port_router", "port_router", "port"])} (dns: ${pickString(stRow, ["dnsname", "Dns_name"])})`
+      );
+      console.log(
+        `  bot / owner            : @${pickString(stRow, ["Username_bot", "username_bot"]).replace(/^@/, "")} / @${pickString(stRow, ["Owner", "Username_owner", "username_owner"]).replace(/^@/, "")} (${pickString(stRow, ["Id_owner", "id_owner"])})`
+      );
+    }
     console.log(
       `- voucher_packages       : ${saldoPackagesPreview.length} saldo + ${nonsaldoPackagesPreview.length} nonsaldo`
     );
     console.log(
-      `- resellers              : ${resellers.length} (SUM balance = Rp ${expectedResellerBalanceSum.toLocaleString("id-ID")})`
+      `- resellers              : ${resellers.length} included (${skippedResellers.length} excluded: ${skippedResellers.map((r) => `@${r.username}:${r.telegram_id}`).join(", ") || "none"}) | SUM balance = Rp ${expectedResellerBalanceSum.toLocaleString("id-ID")}`
     );
+    for (const r of resellers) {
+      console.log(
+        `    • @${r.username} (${r.telegram_id}) — saldo Rp ${Number(r.balance ?? 0).toLocaleString("id-ID")}, sold=${r.vouchers_sold}`
+      );
+    }
     console.log(
       `- wallet_transactions    : ${previewWalletTxs.length} (SUM topup = Rp ${expectedTopupSum.toLocaleString("id-ID")}, SUM voucher Success = Rp ${expectedVoucherSuccessSum.toLocaleString("id-ID")})`
     );
@@ -426,7 +487,15 @@ async function main() {
     const supabase = createServiceClient();
 
     if (opts.verifyOnly) {
-      await runReconciliation(supabase, {
+      const { data: srv } = await supabase
+        .from("servers")
+        .select("id, name, slug")
+        .eq("slug", opts.serverSlug)
+        .maybeSingle();
+      if (!srv) {
+        throw new Error(`Server with slug "${opts.serverSlug}" not found in Supabase.`);
+      }
+      await runReconciliation(supabase, srv.id, `${srv.name} (${srv.slug})`, {
         resellerCount: resellers.length,
         resellerBalanceSum: expectedResellerBalanceSum,
         walletTxCount: previewWalletTxs.length,
@@ -439,12 +508,16 @@ async function main() {
       return;
     }
 
-    // 2. Migrate st_mikbotam -> routers, app_settings, voucher_packages
+    // 2. Migrate st_mikbotam -> routers, servers (+ app_settings for default), voucher_packages
     let routerId: string | null = null;
+    let serverId: string | null = null;
     let ownerTelegramId: number | null = null;
+    let displayServerName = opts.serverName || opts.serverSlug;
 
     if (stRow) {
-      console.log("\n→ Migrating st_mikbotam -> routers, app_settings, voucher_packages...");
+      console.log(
+        `\n→ Migrating st_mikbotam -> routers, servers (${opts.serverSlug}), voucher_packages...`
+      );
 
       const rawRouterHost = pickString(
         stRow,
@@ -454,7 +527,7 @@ async function main() {
       const [hostPart, portFromHost] = rawRouterHost.split(":");
       const routerPort =
         Number(
-          pickString(stRow, ["Port_router", "port_router", "port"]) ||
+          pickString(stRow, ["Port", "Port_router", "port_router", "port"]) ||
             portFromHost
         ) || 8728;
 
@@ -470,7 +543,10 @@ async function main() {
 
       const routerName =
         pickString(stRow, ["Nama_router", "nama_router", "router_name"]) ||
+        opts.serverName ||
         "SalikurNet Router";
+      displayServerName = opts.serverName || routerName;
+
       const routerUser =
         pickString(stRow, [
           "Username_router",
@@ -482,15 +558,15 @@ async function main() {
         pickString(stRow, ["dnsname", "Dns_name", "dns_name", "dns"]) ||
         "wifi.salikur.net";
 
-      const { data: existingRouter } = await supabase
-        .from("routers")
-        .select("id")
-        .eq("is_default", true)
-        .limit(1)
+      // Check if server row already exists for this slug
+      const { data: existingServer } = await supabase
+        .from("servers")
+        .select("id, router_id, webhook_secret, ppob_proxy_url")
+        .eq("slug", opts.serverSlug)
         .maybeSingle();
 
-      if (existingRouter) {
-        routerId = existingRouter.id;
+      if (existingServer?.router_id) {
+        routerId = existingServer.router_id;
         const { error: updErr } = await supabase
           .from("routers")
           .update({
@@ -503,7 +579,32 @@ async function main() {
           })
           .eq("id", routerId);
         if (updErr) throw updErr;
-      } else {
+        console.log(`  ✓ Updated existing router: ${routerName} (${hostPart || rawRouterHost}:${routerPort})`);
+      } else if (isDefaultServer) {
+        const { data: defRouter } = await supabase
+          .from("routers")
+          .select("id")
+          .eq("is_default", true)
+          .limit(1)
+          .maybeSingle();
+        if (defRouter) {
+          routerId = defRouter.id;
+          const { error: updErr } = await supabase
+            .from("routers")
+            .update({
+              name: routerName,
+              host: hostPart || rawRouterHost,
+              port: routerPort,
+              username: routerUser,
+              password_encrypted: encryptedRouterPass,
+              dns_name: dnsName,
+            })
+            .eq("id", routerId);
+          if (updErr) throw updErr;
+        }
+      }
+
+      if (!routerId) {
         const { data: insertedRouter, error: insErr } = await supabase
           .from("routers")
           .insert({
@@ -515,13 +616,14 @@ async function main() {
             username: routerUser,
             password_encrypted: encryptedRouterPass,
             dns_name: dnsName,
-            is_default: true,
+            is_default: isDefaultServer,
             is_active: true,
           })
           .select("id")
           .single();
         if (insErr) throw insErr;
         routerId = insertedRouter.id;
+        console.log(`  ✓ Created router: ${routerName} (${hostPart || rawRouterHost}:${routerPort})`);
       }
 
       const rawBotToken = pickString(stRow, ["Token_bot", "token_bot"]);
@@ -530,41 +632,82 @@ async function main() {
         pickString(stRow, ["Username_bot", "username_bot"]).replace(/^@/, "") ||
         null;
       const ownerUsername =
-        pickString(stRow, ["Username_owner", "username_owner", "owner"]).replace(
-          /^@/,
-          ""
-        ) || null;
+        pickString(stRow, [
+          "Owner",
+          "Username_owner",
+          "username_owner",
+          "owner",
+        ]).replace(/^@/, "") || null;
       ownerTelegramId = parseBigIntId(
         pickField(stRow, ["Id_owner", "id_owner", "owner_telegram_id"])
       );
 
-      const { data: currentSettings } = await supabase
-        .from("app_settings")
-        .select("webhook_secret")
-        .eq("id", 1)
-        .maybeSingle();
+      // Share ppob_proxy_url from default server so bprku.com relay works immediately
+      let sharedProxyUrl: string | null =
+        existingServer?.ppob_proxy_url ?? null;
+      if (!sharedProxyUrl) {
+        const { data: defSrv } = await supabase
+          .from("servers")
+          .select("ppob_proxy_url")
+          .eq("is_default", true)
+          .maybeSingle();
+        sharedProxyUrl = defSrv?.ppob_proxy_url ?? null;
+      }
 
       const webhookSecret =
-        currentSettings?.webhook_secret ||
+        existingServer?.webhook_secret ||
         crypto.randomBytes(24).toString("hex");
 
-      const { error: settingsErr } = await supabase.from("app_settings").upsert(
-        {
-          id: 1,
-          bot_token_encrypted: encryptedBotToken,
-          bot_username: botUsername,
-          owner_username: ownerUsername,
-          owner_telegram_id: ownerTelegramId,
-          webhook_secret: webhookSecret,
-        },
-        { onConflict: "id" }
-      );
-      if (settingsErr) throw settingsErr;
+      const { data: upsertedServer, error: srvErr } = await supabase
+        .from("servers")
+        .upsert(
+          {
+            slug: opts.serverSlug,
+            name: displayServerName,
+            router_id: routerId,
+            bot_token_encrypted: encryptedBotToken,
+            bot_username: botUsername,
+            owner_username: ownerUsername,
+            owner_telegram_id: ownerTelegramId,
+            webhook_secret: webhookSecret,
+            ppob_proxy_url: sharedProxyUrl,
+            ppob_enabled: true,
+            is_default: isDefaultServer,
+            is_active: true,
+          },
+          { onConflict: "slug" }
+        )
+        .select("id")
+        .single();
+      if (srvErr || !upsertedServer) throw srvErr ?? new Error("Failed to upsert server");
+      serverId = upsertedServer.id;
+      console.log(`  ✓ Upserted server: ${displayServerName} (slug=${opts.serverSlug}, id=${serverId})`);
 
-      // Voucher packages (idempotent: only insert if table is currently empty)
+      // Seed default bot templates for this server
+      await supabase.rpc("seed_server_default_templates", {
+        p_server_id: serverId,
+      });
+
+      // Keep legacy app_settings synced only for default server
+      if (isDefaultServer) {
+        await supabase.from("app_settings").upsert(
+          {
+            id: 1,
+            bot_token_encrypted: encryptedBotToken,
+            bot_username: botUsername,
+            owner_username: ownerUsername,
+            owner_telegram_id: ownerTelegramId,
+            webhook_secret: webhookSecret,
+          },
+          { onConflict: "id" }
+        );
+      }
+
+      // Voucher packages (idempotent per server_id)
       const { count: existingPkgCount } = await supabase
         .from("voucher_packages")
-        .select("*", { count: "exact", head: true });
+        .select("*", { count: "exact", head: true })
+        .eq("server_id", serverId);
 
       if ((existingPkgCount ?? 0) === 0) {
         const allPackages = [
@@ -578,7 +721,7 @@ async function main() {
             "nonsaldo",
             routerId
           ),
-        ];
+        ].map((p) => ({ ...p, server_id: serverId! }));
 
         if (allPackages.length > 0) {
           const { error: pkgErr } = await supabase
@@ -589,23 +732,32 @@ async function main() {
         }
       } else {
         console.log(
-          `  ℹ️  voucher_packages already has ${existingPkgCount} rows, skipping duplicate insert.`
+          `  ℹ️  voucher_packages already has ${existingPkgCount} rows for ${opts.serverSlug}, skipping duplicate insert.`
         );
       }
     }
 
-    // 3. Migrate resellers (upsert by telegram_id)
-    console.log(`\n→ Migrating ${resellers.length} resellers...`);
+    if (!serverId) {
+      throw new Error("Could not resolve target server_id.");
+    }
+
+    // 3. Migrate resellers (upsert by server_id, telegram_id)
+    console.log(`\n→ Migrating ${resellers.length} resellers for ${opts.serverSlug}...`);
     if (resellers.length > 0) {
+      const scopedResellers = resellers.map((r) => ({
+        ...r,
+        server_id: serverId!,
+      }));
       const { error: resErr } = await supabase
         .from("resellers")
-        .upsert(resellers, { onConflict: "telegram_id" });
+        .upsert(scopedResellers, { onConflict: "server_id,telegram_id" });
       if (resErr) throw resErr;
     }
 
     const { data: savedResellers, error: fetchResErr } = await supabase
       .from("resellers")
-      .select("id, telegram_id");
+      .select("id, telegram_id")
+      .eq("server_id", serverId);
     if (fetchResErr) throw fetchResErr;
 
     const resellerIdByTelegramId = new Map<number, string>();
@@ -617,10 +769,18 @@ async function main() {
     // 4. Migrate re_operating -> wallet_transactions in chunks
     const walletTxs = operatingRows
       .map((r) => mapOperatingRowToWalletTx(r, resellerIdByTelegramId))
-      .filter((r): r is NonNullable<typeof r> => r !== null);
+      .filter((r): r is NonNullable<typeof r> => r !== null)
+      .map((tx) => ({
+        ...tx,
+        server_id: serverId!,
+        legacy_no:
+          tx.legacy_no !== null
+            ? legacyIdSign * Math.abs(Number(tx.legacy_no))
+            : null,
+      }));
 
     console.log(
-      `\n→ Migrating ${walletTxs.length} wallet_transactions (chunk size: ${opts.chunkSize})...`
+      `\n→ Migrating ${walletTxs.length} wallet_transactions (chunk size: ${opts.chunkSize}, legacy_no sign=${legacyIdSign})...`
     );
     for (let i = 0; i < walletTxs.length; i += opts.chunkSize) {
       const chunk = walletTxs.slice(i, i + opts.chunkSize);
@@ -639,16 +799,41 @@ async function main() {
     }
 
     // 5. Migrate log_trans_pulsa -> ppob_transactions
+    const { data: otherServerTrxIds } = await supabase
+      .from("ppob_transactions")
+      .select("trx_id")
+      .neq("server_id", serverId);
+    const usedTrxIds = new Set(
+      (otherServerTrxIds ?? []).map((row) => row.trx_id)
+    );
+
     const ppobTxs = ppobRows
       .map((r) => mapPpobRow(r, resellerIdByTelegramId))
-      .filter((r): r is NonNullable<typeof r> => r !== null);
+      .filter((r): r is NonNullable<typeof r> => r !== null)
+      .map((tx) => {
+        const safeTrxId = usedTrxIds.has(tx.trx_id)
+          ? `${opts.serverSlug.toUpperCase()}-${tx.trx_id}`
+          : tx.trx_id;
+        return {
+          ...tx,
+          server_id: serverId!,
+          trx_id: safeTrxId,
+          legacy_id:
+            tx.legacy_id !== null
+              ? legacyIdSign * Math.abs(Number(tx.legacy_id))
+              : null,
+        };
+      });
 
     console.log(`\n→ Migrating ${ppobTxs.length} ppob_transactions...`);
     if (ppobTxs.length > 0) {
-      const { error: ppobErr } = await supabase
-        .from("ppob_transactions")
-        .upsert(ppobTxs, { onConflict: "trx_id" });
-      if (ppobErr) throw ppobErr;
+      for (let i = 0; i < ppobTxs.length; i += opts.chunkSize) {
+        const chunk = ppobTxs.slice(i, i + opts.chunkSize);
+        const { error: ppobErr } = await supabase
+          .from("ppob_transactions")
+          .upsert(chunk, { onConflict: "trx_id" });
+        if (ppobErr) throw ppobErr;
+      }
       console.log(`  ✓ Upserted ${ppobTxs.length} ppob_transactions`);
     }
 
@@ -666,10 +851,14 @@ async function main() {
       );
       if (!transformed) continue;
 
+      const scopedBatchCode = isDefaultServer
+        ? transformed.batch.batch_code
+        : `${opts.serverSlug.toUpperCase()}-${transformed.batch.batch_code}`;
+
       const { data: existingBatch } = await supabase
         .from("voucher_batches")
         .select("id")
-        .eq("batch_code", transformed.batch.batch_code)
+        .eq("batch_code", scopedBatchCode)
         .maybeSingle();
 
       if (existingBatch) {
@@ -678,7 +867,11 @@ async function main() {
 
       const { data: insertedBatch, error: batchErr } = await supabase
         .from("voucher_batches")
-        .insert(transformed.batch)
+        .insert({
+          ...transformed.batch,
+          server_id: serverId,
+          batch_code: scopedBatchCode,
+        })
         .select("id")
         .single();
       if (batchErr) throw batchErr;
@@ -686,6 +879,7 @@ async function main() {
       if (transformed.vouchers.length > 0) {
         const voucherRows = transformed.vouchers.map((v) => ({
           ...v,
+          server_id: serverId,
           batch_id: insertedBatch.id,
         }));
         const { error: vErr } = await supabase
@@ -699,22 +893,27 @@ async function main() {
       `  ✓ Processed ${batchFiles.length} batches (${importedVouchers} vouchers inserted)`
     );
 
-    // 7. Seed initial admin user in Supabase Auth (never migrating plaintext password)
+    // 7. Seed initial admin user in Supabase Auth (only if requested)
     if (!opts.skipAdminSeed) {
       await seedInitialAdmin(supabase, ownerTelegramId);
     }
 
-    // 8. Reconcile & verify counts + financial sums
-    await runReconciliation(supabase, {
-      resellerCount: resellers.length,
-      resellerBalanceSum: expectedResellerBalanceSum,
-      walletTxCount: walletTxs.length,
-      topupSum: expectedTopupSum,
-      voucherSuccessSum: expectedVoucherSuccessSum,
-      ppobCount: ppobTxs.length,
-      ppobProfitSum: expectedPpobProfitSum,
-      batchCount: batchFiles.length,
-    });
+    // 8. Reconcile & verify counts + financial sums for this server
+    await runReconciliation(
+      supabase,
+      serverId,
+      `${displayServerName} (${opts.serverSlug})`,
+      {
+        resellerCount: resellers.length,
+        resellerBalanceSum: expectedResellerBalanceSum,
+        walletTxCount: walletTxs.length,
+        topupSum: expectedTopupSum,
+        voucherSuccessSum: expectedVoucherSuccessSum,
+        ppobCount: ppobTxs.length,
+        ppobProfitSum: expectedPpobProfitSum,
+        batchCount: batchFiles.length,
+      }
+    );
   } finally {
     db.close();
   }

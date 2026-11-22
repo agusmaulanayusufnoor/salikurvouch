@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { FileSpreadsheet, Printer } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getActiveServer } from "@/lib/server-context";
 import { formatIDR } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,12 +35,16 @@ export default async function PpobReportsPage({
   const from = sp.from || "";
   const to = sp.to || "";
 
-  const supabase = await createClient();
+  const [supabase, activeServer] = await Promise.all([
+    createClient(),
+    getActiveServer(),
+  ]);
   let query = supabase
     .from("ppob_transactions")
     .select(
       "product_code, telegram_id, cost_price, sell_price, profit, status, resellers(username)"
     )
+    .eq("server_id", activeServer?.id ?? "")
     .in("status", ["SUCCESS", "PROCESSED"]);
 
   if (from) query = query.gte("created_at", `${from}T00:00:00+07:00`);

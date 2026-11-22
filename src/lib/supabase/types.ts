@@ -44,6 +44,42 @@ export type Database = {
         }
         Relationships: []
       }
+      admin_server_access: {
+        Row: {
+          admin_id: string
+          created_at: string
+          role: string
+          server_id: string
+        }
+        Insert: {
+          admin_id: string
+          created_at?: string
+          role?: string
+          server_id: string
+        }
+        Update: {
+          admin_id?: string
+          created_at?: string
+          role?: string
+          server_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_server_access_admin_id_fkey"
+            columns: ["admin_id"]
+            isOneToOne: false
+            referencedRelation: "admin_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "admin_server_access_server_id_fkey"
+            columns: ["server_id"]
+            isOneToOne: false
+            referencedRelation: "servers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       app_settings: {
         Row: {
           bot_mode: string
@@ -175,26 +211,38 @@ export type Database = {
           content: string
           key: string
           label: string
+          server_id: string
           updated_at: string
         }
         Insert: {
           content: string
           key: string
           label: string
+          server_id?: string
           updated_at?: string
         }
         Update: {
           content?: string
           key?: string
           label?: string
+          server_id?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "bot_message_templates_server_id_fkey"
+            columns: ["server_id"]
+            isOneToOne: false
+            referencedRelation: "servers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       bot_user_states: {
         Row: {
           expires_at: string
           payload: Json
+          server_id: string
           step: string
           telegram_id: number
           updated_at: string
@@ -202,6 +250,7 @@ export type Database = {
         Insert: {
           expires_at?: string
           payload?: Json
+          server_id?: string
           step: string
           telegram_id: number
           updated_at?: string
@@ -209,11 +258,20 @@ export type Database = {
         Update: {
           expires_at?: string
           payload?: Json
+          server_id?: string
           step?: string
           telegram_id?: number
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "bot_user_states_server_id_fkey"
+            columns: ["server_id"]
+            isOneToOne: false
+            referencedRelation: "servers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       broadcast_logs: {
         Row: {
@@ -224,6 +282,7 @@ export type Database = {
           id: string
           media_path: string | null
           message_type: string
+          server_id: string
           success_count: number
           target_scope: string
           total_targets: number
@@ -236,6 +295,7 @@ export type Database = {
           id?: string
           media_path?: string | null
           message_type: string
+          server_id?: string
           success_count?: number
           target_scope: string
           total_targets?: number
@@ -248,11 +308,20 @@ export type Database = {
           id?: string
           media_path?: string | null
           message_type?: string
+          server_id?: string
           success_count?: number
           target_scope?: string
           total_targets?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "broadcast_logs_server_id_fkey"
+            columns: ["server_id"]
+            isOneToOne: false
+            referencedRelation: "servers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       deposit_requests: {
         Row: {
@@ -264,6 +333,7 @@ export type Database = {
           processed_by: string | null
           proof_file_path: string | null
           reseller_id: string
+          server_id: string
           status: string
         }
         Insert: {
@@ -275,6 +345,7 @@ export type Database = {
           processed_by?: string | null
           proof_file_path?: string | null
           reseller_id: string
+          server_id?: string
           status?: string
         }
         Update: {
@@ -286,6 +357,7 @@ export type Database = {
           processed_by?: string | null
           proof_file_path?: string | null
           reseller_id?: string
+          server_id?: string
           status?: string
         }
         Relationships: [
@@ -294,6 +366,13 @@ export type Database = {
             columns: ["reseller_id"]
             isOneToOne: false
             referencedRelation: "resellers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deposit_requests_server_id_fkey"
+            columns: ["server_id"]
+            isOneToOne: false
+            referencedRelation: "servers"
             referencedColumns: ["id"]
           },
         ]
@@ -331,6 +410,7 @@ export type Database = {
       ppob_daily_counters: {
         Row: {
           product_code: string
+          server_id: string
           target_number: string
           telegram_id: number
           tx_count: number
@@ -339,6 +419,7 @@ export type Database = {
         }
         Insert: {
           product_code: string
+          server_id?: string
           target_number: string
           telegram_id: number
           tx_count?: number
@@ -347,13 +428,22 @@ export type Database = {
         }
         Update: {
           product_code?: string
+          server_id?: string
           target_number?: string
           telegram_id?: number
           tx_count?: number
           tx_date?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "ppob_daily_counters_server_id_fkey"
+            columns: ["server_id"]
+            isOneToOne: false
+            referencedRelation: "servers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       ppob_transactions: {
         Row: {
@@ -369,6 +459,7 @@ export type Database = {
           reseller_id: string | null
           sell_price: number
           serial_number: string | null
+          server_id: string
           source: string
           status: string
           target_number: string
@@ -389,6 +480,7 @@ export type Database = {
           reseller_id?: string | null
           sell_price?: number
           serial_number?: string | null
+          server_id?: string
           source?: string
           status?: string
           target_number: string
@@ -409,6 +501,7 @@ export type Database = {
           reseller_id?: string | null
           sell_price?: number
           serial_number?: string | null
+          server_id?: string
           source?: string
           status?: string
           target_number?: string
@@ -424,6 +517,13 @@ export type Database = {
             referencedRelation: "resellers"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "ppob_transactions_server_id_fkey"
+            columns: ["server_id"]
+            isOneToOne: false
+            referencedRelation: "servers"
+            referencedColumns: ["id"]
+          },
         ]
       }
       resellers: {
@@ -434,6 +534,7 @@ export type Database = {
           notes: string | null
           phone: string | null
           reseller_type: string | null
+          server_id: string
           status: string
           telegram_id: number
           updated_at: string
@@ -447,6 +548,7 @@ export type Database = {
           notes?: string | null
           phone?: string | null
           reseller_type?: string | null
+          server_id?: string
           status?: string
           telegram_id: number
           updated_at?: string
@@ -460,13 +562,22 @@ export type Database = {
           notes?: string | null
           phone?: string | null
           reseller_type?: string | null
+          server_id?: string
           status?: string
           telegram_id?: number
           updated_at?: string
           username?: string
           vouchers_sold?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "resellers_server_id_fkey"
+            columns: ["server_id"]
+            isOneToOne: false
+            referencedRelation: "servers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       routers: {
         Row: {
@@ -519,20 +630,111 @@ export type Database = {
         }
         Relationships: []
       }
+      servers: {
+        Row: {
+          bot_mode: string
+          bot_token_encrypted: string | null
+          bot_username: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          is_default: boolean
+          low_balance_threshold: number
+          max_deposit_amount: number
+          name: string
+          owner_telegram_id: number | null
+          owner_username: string | null
+          ppob_enabled: boolean
+          ppob_markup_large_pct: number
+          ppob_markup_small_pct: number
+          ppob_markup_threshold: number
+          ppob_proxy_url: string | null
+          router_id: string | null
+          slug: string
+          updated_at: string
+          webhook_secret: string | null
+        }
+        Insert: {
+          bot_mode?: string
+          bot_token_encrypted?: string | null
+          bot_username?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          is_default?: boolean
+          low_balance_threshold?: number
+          max_deposit_amount?: number
+          name: string
+          owner_telegram_id?: number | null
+          owner_username?: string | null
+          ppob_enabled?: boolean
+          ppob_markup_large_pct?: number
+          ppob_markup_small_pct?: number
+          ppob_markup_threshold?: number
+          ppob_proxy_url?: string | null
+          router_id?: string | null
+          slug: string
+          updated_at?: string
+          webhook_secret?: string | null
+        }
+        Update: {
+          bot_mode?: string
+          bot_token_encrypted?: string | null
+          bot_username?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          is_default?: boolean
+          low_balance_threshold?: number
+          max_deposit_amount?: number
+          name?: string
+          owner_telegram_id?: number | null
+          owner_username?: string | null
+          ppob_enabled?: boolean
+          ppob_markup_large_pct?: number
+          ppob_markup_small_pct?: number
+          ppob_markup_threshold?: number
+          ppob_proxy_url?: string | null
+          router_id?: string | null
+          slug?: string
+          updated_at?: string
+          webhook_secret?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "servers_router_id_fkey"
+            columns: ["router_id"]
+            isOneToOne: true
+            referencedRelation: "routers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       telegram_processed_updates: {
         Row: {
           processed_at: string
+          server_id: string
           update_id: number
         }
         Insert: {
           processed_at?: string
+          server_id?: string
           update_id: number
         }
         Update: {
           processed_at?: string
+          server_id?: string
           update_id?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "telegram_processed_updates_server_id_fkey"
+            columns: ["server_id"]
+            isOneToOne: false
+            referencedRelation: "servers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       voucher_batches: {
         Row: {
@@ -546,6 +748,7 @@ export type Database = {
           quantity: number
           reseller_id: string | null
           router_id: string | null
+          server_id: string
           source: string
           telegram_error: string | null
           telegram_sent: boolean
@@ -562,6 +765,7 @@ export type Database = {
           quantity?: number
           reseller_id?: string | null
           router_id?: string | null
+          server_id?: string
           source?: string
           telegram_error?: string | null
           telegram_sent?: boolean
@@ -578,6 +782,7 @@ export type Database = {
           quantity?: number
           reseller_id?: string | null
           router_id?: string | null
+          server_id?: string
           source?: string
           telegram_error?: string | null
           telegram_sent?: boolean
@@ -605,6 +810,13 @@ export type Database = {
             referencedRelation: "routers"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "voucher_batches_server_id_fkey"
+            columns: ["server_id"]
+            isOneToOne: false
+            referencedRelation: "servers"
+            referencedColumns: ["id"]
+          },
         ]
       }
       voucher_packages: {
@@ -629,6 +841,7 @@ export type Database = {
           name: string
           price: number
           router_id: string | null
+          server_id: string
           sort_order: number
           updated_at: string
         }
@@ -653,6 +866,7 @@ export type Database = {
           name: string
           price?: number
           router_id?: string | null
+          server_id?: string
           sort_order?: number
           updated_at?: string
         }
@@ -677,6 +891,7 @@ export type Database = {
           name?: string
           price?: number
           router_id?: string | null
+          server_id?: string
           sort_order?: number
           updated_at?: string
         }
@@ -686,6 +901,13 @@ export type Database = {
             columns: ["router_id"]
             isOneToOne: false
             referencedRelation: "routers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "voucher_packages_server_id_fkey"
+            columns: ["server_id"]
+            isOneToOne: false
+            referencedRelation: "servers"
             referencedColumns: ["id"]
           },
         ]
@@ -707,6 +929,7 @@ export type Database = {
           price: number
           profile: string | null
           reseller_id: string | null
+          server_id: string
           status: string
           time_limit: string | null
           username: string
@@ -727,6 +950,7 @@ export type Database = {
           price?: number
           profile?: string | null
           reseller_id?: string | null
+          server_id?: string
           status?: string
           time_limit?: string | null
           username: string
@@ -747,6 +971,7 @@ export type Database = {
           price?: number
           profile?: string | null
           reseller_id?: string | null
+          server_id?: string
           status?: string
           time_limit?: string | null
           username?: string
@@ -773,6 +998,13 @@ export type Database = {
             referencedRelation: "resellers"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "vouchers_server_id_fkey"
+            columns: ["server_id"]
+            isOneToOne: false
+            referencedRelation: "servers"
+            referencedColumns: ["id"]
+          },
         ]
       }
       wallet_transactions: {
@@ -788,6 +1020,7 @@ export type Database = {
           reseller_id: string | null
           router_name: string | null
           seller_name: string | null
+          server_id: string
           status: string
           telegram_id: number
           topup_by: string | null
@@ -809,6 +1042,7 @@ export type Database = {
           reseller_id?: string | null
           router_name?: string | null
           seller_name?: string | null
+          server_id?: string
           status?: string
           telegram_id: number
           topup_by?: string | null
@@ -830,6 +1064,7 @@ export type Database = {
           reseller_id?: string | null
           router_name?: string | null
           seller_name?: string | null
+          server_id?: string
           status?: string
           telegram_id?: number
           topup_by?: string | null
@@ -847,6 +1082,13 @@ export type Database = {
             referencedRelation: "resellers"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "wallet_transactions_server_id_fkey"
+            columns: ["server_id"]
+            isOneToOne: false
+            referencedRelation: "servers"
+            referencedColumns: ["id"]
+          },
         ]
       }
     }
@@ -854,6 +1096,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      default_server_id: { Args: never; Returns: string }
       rpc_adjust_balance: {
         Args: {
           p_actor?: string
@@ -869,9 +1112,35 @@ export type Database = {
           transaction_id: number
         }[]
       }
+      rpc_adjust_balance_v2: {
+        Args: {
+          p_actor?: string
+          p_delta: number
+          p_notes?: string
+          p_server_id: string
+          p_telegram_id: number
+          p_tx_type: string
+        }
+        Returns: {
+          balance_after: number
+          balance_before: number
+          reseller_id: string
+          transaction_id: number
+        }[]
+      }
       rpc_next_ppob_counter: {
         Args: {
           p_product_code: string
+          p_target_number: string
+          p_telegram_id: number
+          p_tx_date: string
+        }
+        Returns: number
+      }
+      rpc_next_ppob_counter_v2: {
+        Args: {
+          p_product_code: string
+          p_server_id: string
           p_target_number: string
           p_telegram_id: number
           p_tx_date: string
@@ -900,6 +1169,25 @@ export type Database = {
           reseller_id: string
           transaction_id: number
         }[]
+      }
+      rpc_reserve_balance_v2: {
+        Args: {
+          p_amount: number
+          p_meta?: Json
+          p_server_id: string
+          p_telegram_id: number
+          p_tx_type: string
+        }
+        Returns: {
+          balance_after: number
+          balance_before: number
+          reseller_id: string
+          transaction_id: number
+        }[]
+      }
+      seed_server_default_templates: {
+        Args: { p_server_id: string }
+        Returns: undefined
       }
     }
     Enums: {

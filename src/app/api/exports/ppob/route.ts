@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { getAuthenticatedStaff } from "@/lib/auth";
+import { getActiveServer } from "@/lib/server-context";
 import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -18,7 +19,10 @@ export async function GET(request: Request) {
   const status = searchParams.get("status")?.trim() || "";
   const q = searchParams.get("q")?.trim() || "";
 
-  const supabase = await createClient();
+  const [supabase, activeServer] = await Promise.all([
+    createClient(),
+    getActiveServer(),
+  ]);
   let query = supabase
     .from("ppob_transactions")
     .select(
@@ -27,6 +31,7 @@ export async function GET(request: Request) {
     .order("created_at", { ascending: false })
     .limit(5000);
 
+  if (activeServer) query = query.eq("server_id", activeServer.id);
   if (resellerId && resellerId !== "all") query = query.eq("reseller_id", resellerId);
   if (status && status !== "all") query = query.eq("status", status);
   if (from) query = query.gte("created_at", `${from}T00:00:00+07:00`);
@@ -120,12 +125,13 @@ export async function GET(request: Request) {
 
   const buffer = await wb.xlsx.writeBuffer();
   const stamp = new Date().toISOString().slice(0, 10);
+  const slugPart = activeServer?.slug ? `-${activeServer.slug}` : "";
   return new NextResponse(Buffer.from(buffer), {
     status: 200,
     headers: {
       "Content-Type":
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "Content-Disposition": `attachment; filename="salikurvouch-ppob-${stamp}.xlsx"`,
+      "Content-Disposition": `attachment; filename="salikurvouch${slugPart}-ppob-${stamp}.xlsx"`,
     },
   });
 }

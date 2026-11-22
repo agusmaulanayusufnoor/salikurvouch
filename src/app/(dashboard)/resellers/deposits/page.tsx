@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getActiveServer } from "@/lib/server-context";
 import { DepositsClient } from "./deposits-client";
 
 export const metadata = {
@@ -6,7 +7,11 @@ export const metadata = {
 };
 
 export default async function DepositsPage() {
-  const supabase = await createClient();
+  const [supabase, activeServer] = await Promise.all([
+    createClient(),
+    getActiveServer(),
+  ]);
+  const serverId = activeServer?.id ?? "";
 
   const [reqRes, resellersRes] = await Promise.all([
     supabase
@@ -14,11 +19,13 @@ export default async function DepositsPage() {
       .select(
         "id, amount, approved_amount, status, proof_file_path, processed_by, processed_at, created_at, resellers(username, telegram_id)"
       )
+      .eq("server_id", serverId)
       .order("created_at", { ascending: false })
       .limit(100),
     supabase
       .from("resellers")
       .select("id, username, telegram_id")
+      .eq("server_id", serverId)
       .eq("status", "active")
       .order("username", { ascending: true }),
   ]);

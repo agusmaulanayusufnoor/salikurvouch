@@ -165,7 +165,7 @@ export async function sendExistingVoucherToTelegramAction(input: {
     const supabase = await createClient();
     const { data: reseller } = await supabase
       .from("resellers")
-      .select("id, telegram_id, username")
+      .select("id, server_id, telegram_id, username")
       .eq("id", input.resellerId)
       .maybeSingle();
 
@@ -173,7 +173,7 @@ export async function sendExistingVoucherToTelegramAction(input: {
       return { ok: false, message: "Reseller tidak ditemukan." };
     }
 
-    const bot = await getBotTokenFromSettings();
+    const bot = await getBotTokenFromSettings(reseller.server_id);
     if (!bot) {
       return {
         ok: false,

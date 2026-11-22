@@ -1,7 +1,7 @@
 import http from "node:http";
 import https from "node:https";
 import tls from "node:tls";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getActiveServer, getDefaultServer } from "@/lib/server-context";
 
 export type PpobCategory = "PULSA" | "PLN" | "GAME";
 
@@ -62,24 +62,36 @@ export function calculatePpobSellPrice(
   };
 }
 
-export async function getPpobRuntimeConfig(): Promise<PortalPulsaMarkupConfig> {
-  const admin = createAdminClient();
-  const { data } = await admin
-    .from("app_settings")
-    .select(
-      "ppob_markup_small_pct, ppob_markup_large_pct, ppob_markup_threshold, ppob_proxy_url"
-    )
-    .eq("id", 1)
-    .maybeSingle();
+export async function getPpobRuntimeConfig(
+  serverId?: string
+): Promise<PortalPulsaMarkupConfig> {
+  let srv;
+  try {
+    srv = await getActiveServer(serverId);
+  } catch {
+    srv = null;
+  }
+
+  // Share the default server's relay/proxy URL across all servers unless overridden
+  let sharedProxyUrl =
+    process.env.PORTALPULSA_PROXY_URL?.trim() ||
+    srv?.ppob_proxy_url?.trim() ||
+    null;
+
+  if (!sharedProxyUrl && srv && !srv.is_default) {
+    try {
+      const defSrv = await getDefaultServer();
+      sharedProxyUrl = defSrv.ppob_proxy_url?.trim() || null;
+    } catch {
+      // ignore
+    }
+  }
 
   return {
-    smallPct: Number(data?.ppob_markup_small_pct ?? 3),
-    largePct: Number(data?.ppob_markup_large_pct ?? 1),
-    threshold: Number(data?.ppob_markup_threshold ?? 100000),
-    proxyUrl:
-      process.env.PORTALPULSA_PROXY_URL?.trim() ||
-      data?.ppob_proxy_url?.trim() ||
-      null,
+    smallPct: Number(srv?.ppob_markup_small_pct ?? 3),
+    largePct: Number(srv?.ppob_markup_large_pct ?? 1),
+    threshold: Number(srv?.ppob_markup_threshold ?? 100000),
+    proxyUrl: sharedProxyUrl,
   };
 }
 
@@ -234,9 +246,11 @@ async function postPortalPulsaRaw(
   });
 }
 
-export async function getPortalPulsaBalance(): Promise<PortalPulsaBalanceResult> {
+export async function getPortalPulsaBalance(
+  serverId?: string
+): Promise<PortalPulsaBalanceResult> {
   try {
-    const cfg = await getPpobRuntimeConfig();
+    const cfg = await getPpobRuntimeConfig(serverId);
     const json = (await postPortalPulsaRaw(
       { inquiry: "S" },
       cfg.proxyUrl
@@ -266,9 +280,9 @@ export async function getPortalPulsaBalance(): Promise<PortalPulsaBalanceResult>
 
 export async function getPortalPulsaCatalog(
   category: PpobCategory,
-  options?: { keyword?: string; bypassCache?: boolean }
+  options?: { keyword?: string; bypassCache?: boolean; serverId?: string }
 ): Promise<{ ok: boolean; products: PortalPulsaProduct[]; error?: string }> {
-  const cfg = await getPpobRuntimeConfig();
+  const cfg = await getPpobRuntimeConfig(options?.serverId);
   const cacheKey = `${category}:${cfg.smallPct}:${cfg.largePct}:${cfg.threshold}`;
   const cached = CATALOG_CACHE.get(cacheKey);
 
@@ -340,11 +354,12 @@ export async function getPortalPulsaCatalog(
 }
 
 export async function findPortalPulsaProduct(
-  productCode: string
+  productCode: string,
+  serverId?: string
 ): Promise<PortalPulsaProduct | null> {
   const upper = productCode.trim().toUpperCase();
   for (const cat of ["PULSA", "PLN", "GAME"] as PpobCategory[]) {
-    const res = await getPortalPulsaCatalog(cat);
+    const res = await getPortalPulsaCatalog(cat, { serverId });
     if (!res.ok) continue;
     const hit = res.products.find((p) => p.code.toUpperCase() === upper);
     if (hit) return hit;
@@ -358,8 +373,9 @@ export async function executePortalPulsaOrder(params: {
   customerId?: string;
   trxId: string;
   counterNo: number;
+  serverId?: string;
 }): Promise<PortalPulsaOrderResult> {
-  const cfg = await getPpobRuntimeConfig();
+  const cfg = await getPpobRuntimeConfig(params.serverId);
   const isPln = params.code.toUpperCase().startsWith("PLN");
   const fields: Record<string, string> = {
     inquiry: isPln ? "PLN" : "I",
@@ -398,13 +414,16 @@ export async function executePortalPulsaOrder(params: {
   }
 }
 
-export async function checkPortalPulsaStatus(trxId: string): Promise<{
+export async function checkPortalPulsaStatus(
+  trxId: string,
+  serverId?: string
+): Promise<{
   ok: boolean;
   message: string;
   raw: unknown;
 }> {
   try {
-    const cfg = await getPpobRuntimeConfig();
+    const cfg = await getPpobRuntimeConfig(serverId);
     const json = (await postPortalPulsaRaw(
       { inquiry: "status", trxid_api: trxId },
       cfg.proxyUrl

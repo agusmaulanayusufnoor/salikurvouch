@@ -86,10 +86,15 @@ async function isBotAdmin(
   return Boolean(data);
 }
 
-async function getReseller(admin: AdminClient, telegramId: number) {
+async function getReseller(
+  admin: AdminClient,
+  serverId: string,
+  telegramId: number
+) {
   const { data } = await admin
     .from("resellers")
     .select("id, telegram_id, username, phone, balance, vouchers_sold, status")
+    .eq("server_id", serverId)
     .eq("telegram_id", telegramId)
     .maybeSingle();
   return data;
@@ -97,12 +102,14 @@ async function getReseller(admin: AdminClient, telegramId: number) {
 
 async function getTemplate(
   admin: AdminClient,
+  serverId: string,
   key: string,
   vars: Record<string, string>
 ): Promise<string | null> {
   const { data } = await admin
     .from("bot_message_templates")
     .select("content")
+    .eq("server_id", serverId)
     .eq("key", key)
     .maybeSingle();
   if (!data?.content) return null;
@@ -123,6 +130,7 @@ async function sendVoucherMenu(params: {
   const { data: packages } = await params.admin
     .from("voucher_packages")
     .select("id, name, menu_label, price, markup, limit_uptime")
+    .eq("server_id", params.bot.serverId)
     .eq("mode", params.mode)
     .eq("is_active", true)
     .order("sort_order", { ascending: true })
@@ -190,10 +198,11 @@ async function handleVoucherPurchaseCallback(params: {
       .from("voucher_packages")
       .select("*")
       .eq("id", packageId)
+      .eq("server_id", bot.serverId)
       .eq("mode", mode)
       .eq("is_active", true)
       .maybeSingle(),
-    getReseller(admin, telegramId),
+    getReseller(admin, bot.serverId, telegramId),
   ]);
 
   const pkg = pkgRes.data;
@@ -257,8 +266,9 @@ async function handleVoucherPurchaseCallback(params: {
 
   if (mode === "saldo") {
     const { data: rpcData, error: rpcErr } = await admin.rpc(
-      "rpc_reserve_balance",
+      "rpc_reserve_balance_v2",
       {
+        p_server_id: bot.serverId,
         p_telegram_id: telegramId,
         p_amount: netCost,
         p_tx_type: "voucher_purchase",
@@ -269,7 +279,7 @@ async function handleVoucherPurchaseCallback(params: {
           voucher_password: cred.password,
           voucher_profile: pkg.mikrotik_profile,
           quantity: 1,
-          notes: `Bot Telegram: ${pkg.name}`,
+          notes: `Bot Telegram (${bot.serverName}): ${pkg.name}`,
         },
       }
     );
@@ -302,13 +312,13 @@ async function handleVoucherPurchaseCallback(params: {
   // 2. Create user on MikroTik (dual ROS v6/v7)
   let mikrotikApiId = "";
   let dnsName = "wifi.salikur.net";
-  let routerId: string | null = pkg.router_id;
+  let routerId: string | null = pkg.router_id ?? bot.routerId;
   const batchCode = buildBatchCode();
 
   try {
-    const adapter = await getDefaultMikroTikAdapter(pkg.router_id ?? undefined);
+    const adapter = await getDefaultMikroTikAdapter(routerId ?? undefined);
     dnsName = adapter.config.dnsName;
-    routerId = adapter.config.id ?? pkg.router_id;
+    routerId = adapter.config.id ?? routerId;
 
     mikrotikApiId = await adapter.addHotspotUser({
       server: pkg.mikrotik_server || "all",
@@ -345,6 +355,7 @@ async function handleVoucherPurchaseCallback(params: {
   const { data: batchRow } = await admin
     .from("voucher_batches")
     .insert({
+      server_id: bot.serverId,
       batch_code: batchCode,
       reseller_id: reseller?.id ?? null,
       package_id: pkg.id,
@@ -361,6 +372,7 @@ async function handleVoucherPurchaseCallback(params: {
 
   if (batchRow) {
     await admin.from("vouchers").insert({
+      server_id: bot.serverId,
       batch_id: batchRow.id,
       reseller_id: reseller?.id ?? null,
       package_id: pkg.id,
@@ -383,7 +395,7 @@ async function handleVoucherPurchaseCallback(params: {
   // 4. Send QR Code photo & voucher details to Telegram
   const loginUrl = buildHotspotLoginUrl(dnsName, cred.username, cred.password);
   const qrBuffer = await generateQrPngBuffer(loginUrl, pkg.card_color);
-  const footerTpl = await getTemplate(admin, "voucher_footer", {
+  const footerTpl = await getTemplate(admin, bot.serverId, "voucher_footer", {
     dns_name: dnsName,
     voucher_code: cred.username,
     profile: pkg.mikrotik_profile,
@@ -425,7 +437,7 @@ async function handleVoucherPurchaseCallback(params: {
   if (!sent.ok) {
     // Rollback MikroTik user & refund balance if Telegram delivery failed
     try {
-      const adapter = await getDefaultMikroTikAdapter(pkg.router_id ?? undefined);
+      const adapter = await getDefaultMikroTikAdapter(routerId ?? undefined);
       if (mikrotikApiId) await adapter.removeHotspotUser(mikrotikApiId);
     } catch {
       // ignore cleanup error
@@ -462,7 +474,7 @@ async function handleDepositRequestFlow(params: {
   proofFileId?: string;
 }) {
   const { admin, bot, chatId, telegramId, amount, proofFileId } = params;
-  const reseller = await getReseller(admin, telegramId);
+  const reseller = await getReseller(admin, bot.serverId, telegramId);
   if (!reseller) {
     await sendTelegramMessage({
       token: bot.token,
@@ -484,6 +496,7 @@ async function handleDepositRequestFlow(params: {
   const { data: reqRow, error } = await admin
     .from("deposit_requests")
     .insert({
+      server_id: bot.serverId,
       reseller_id: reseller.id,
       amount,
       status: "pending",
@@ -509,7 +522,7 @@ async function handleDepositRequestFlow(params: {
 
   if (bot.ownerTelegramId) {
     const adminText = [
-      `🔔 <b>Permintaan Deposit Baru</b>`,
+      `🔔 <b>Permintaan Deposit Baru (${escapeHtml(bot.serverName)})</b>`,
       `Reseller : @${escapeHtml(reseller.username)} (<code>${reseller.telegram_id}</code>)`,
       `Nominal  : <b>${formatIDR(amount)}</b>`,
       `Saldo Saat Ini: ${formatIDR(Number(reseller.balance))}`,
@@ -552,18 +565,19 @@ async function handleDepositRequestFlow(params: {
 
 export async function handleTelegramUpdate(
   update: TelegramUpdate,
-  scheduleBackground?: (fn: () => Promise<void>) => void
+  scheduleBackground?: (fn: () => Promise<void>) => void,
+  serverId?: string
 ): Promise<{ handled: boolean; reason?: string }> {
   const admin = createAdminClient();
-  const bot = await getBotTokenFromSettings();
+  const bot = await getBotTokenFromSettings(serverId);
   if (!bot) {
     return { handled: false, reason: "bot_not_configured" };
   }
 
-  // Idempotency check via telegram_processed_updates
+  // Idempotency check via telegram_processed_updates (per server)
   const { error: dedupErr } = await admin
     .from("telegram_processed_updates")
-    .insert({ update_id: update.update_id });
+    .insert({ server_id: bot.serverId, update_id: update.update_id });
 
   if (dedupErr) {
     if (dedupErr.code === "23505") {
@@ -595,7 +609,7 @@ async function handleCallbackQuery(
   const chatId = cb.message?.chat.id ?? telegramId;
 
   if (data === "cek_saldo") {
-    const r = await getReseller(admin, telegramId);
+    const r = await getReseller(admin, bot.serverId, telegramId);
     await answerTelegramCallback({
       token: bot.token,
       callbackQueryId: cb.id,
@@ -608,7 +622,7 @@ async function handleCallbackQuery(
   }
 
   if (data === "info") {
-    const tpl = await getTemplate(admin, "info_menu", {
+    const tpl = await getTemplate(admin, bot.serverId, "info_menu", {
       owner_username: bot.ownerUsername ?? "admin",
       max_deposit: formatIDR(bot.maxDepositAmount),
     });
@@ -625,7 +639,7 @@ async function handleCallbackQuery(
 
   if (data === "menu:saldo" || data === "menu:nonsaldo") {
     await answerTelegramCallback({ token: bot.token, callbackQueryId: cb.id });
-    const r = await getReseller(admin, telegramId);
+    const r = await getReseller(admin, bot.serverId, telegramId);
     await sendVoucherMenu({
       admin,
       bot,
@@ -685,7 +699,7 @@ async function handleCallbackQuery(
     const reqId = data.split(":")[2];
     const { data: reqRow } = await admin
       .from("deposit_requests")
-      .select("id, amount, status, resellers(telegram_id, username)")
+      .select("id, server_id, amount, status, resellers(telegram_id, username)")
       .eq("id", reqId)
       .maybeSingle();
 
@@ -707,8 +721,9 @@ async function handleCallbackQuery(
     let balanceAfter = 0;
     if (decision === "approved" && r) {
       const { data: rpcRes, error: rpcErr } = await admin.rpc(
-        "rpc_adjust_balance",
+        "rpc_adjust_balance_v2",
         {
+          p_server_id: reqRow.server_id,
           p_telegram_id: r.telegram_id,
           p_delta: amount,
           p_tx_type: "topup",
@@ -768,7 +783,9 @@ async function handleCallbackQuery(
   if (data.startsWith("show_op|")) {
     const operator = data.slice(8);
     await answerTelegramCallback({ token: bot.token, callbackQueryId: cb.id });
-    const catalog = await getPortalPulsaCatalog("PULSA");
+    const catalog = await getPortalPulsaCatalog("PULSA", {
+      serverId: bot.serverId,
+    });
     if (!catalog.ok) {
       await sendTelegramMessage({
         token: bot.token,
@@ -813,7 +830,11 @@ async function handleCallbackQuery(
   }
 
   if (data === "cancel_pulsa") {
-    await admin.from("bot_user_states").delete().eq("telegram_id", telegramId);
+    await admin
+      .from("bot_user_states")
+      .delete()
+      .eq("server_id", bot.serverId)
+      .eq("telegram_id", telegramId);
     await answerTelegramCallback({
       token: bot.token,
       callbackQueryId: cb.id,
@@ -841,7 +862,7 @@ async function handleCallbackQuery(
       return;
     }
 
-    const product = await findPortalPulsaProduct(code);
+    const product = await findPortalPulsaProduct(code, bot.serverId);
     if (!product) {
       await answerTelegramCallback({
         token: bot.token,
@@ -857,7 +878,7 @@ async function handleCallbackQuery(
     const profit = Math.max(finalSell - costPrice, 0);
 
     // Pre-check Portal Pulsa API balance
-    const apiBal = await getPortalPulsaBalance();
+    const apiBal = await getPortalPulsaBalance(bot.serverId);
     if (!apiBal.ok || apiBal.balance < costPrice) {
       await answerTelegramCallback({
         token: bot.token,
@@ -870,8 +891,9 @@ async function handleCallbackQuery(
 
     // Reserve reseller balance atomically
     const { data: rpcData, error: rpcErr } = await admin.rpc(
-      "rpc_reserve_balance",
+      "rpc_reserve_balance_v2",
       {
+        p_server_id: bot.serverId,
         p_telegram_id: telegramId,
         p_amount: finalSell,
         p_tx_type: "ppob_purchase",
@@ -900,7 +922,11 @@ async function handleCallbackQuery(
     const resellerId = resRow?.reseller_id ?? null;
     const balanceAfter = Number(resRow?.balance_after ?? 0);
 
-    await admin.from("bot_user_states").delete().eq("telegram_id", telegramId);
+    await admin
+      .from("bot_user_states")
+      .delete()
+      .eq("server_id", bot.serverId)
+      .eq("telegram_id", telegramId);
     await answerTelegramCallback({
       token: bot.token,
       callbackQueryId: cb.id,
@@ -910,19 +936,21 @@ async function handleCallbackQuery(
     const todayWib = new Date(Date.now() + 7 * 60 * 60 * 1000)
       .toISOString()
       .slice(0, 10);
-    const { data: counterNo } = await admin.rpc("rpc_next_ppob_counter", {
+    const { data: counterNo } = await admin.rpc("rpc_next_ppob_counter_v2", {
+      p_server_id: bot.serverId,
       p_tx_date: todayWib,
       p_telegram_id: telegramId,
       p_product_code: product.code,
       p_target_number: phone,
     });
 
-    const trxId = `TRX-${todayWib.replaceAll("-", "")}-${telegramId}-${crypto.randomBytes(4).toString("hex")}`;
+    const trxId = `TRX-${bot.serverSlug.toUpperCase()}-${todayWib.replaceAll("-", "")}-${telegramId}-${crypto.randomBytes(4).toString("hex")}`;
     const order = await executePortalPulsaOrder({
       code: product.code,
       phone,
       trxId,
       counterNo: Number(counterNo ?? 1),
+      serverId: bot.serverId,
     });
 
     if (!order.ok) {
@@ -933,6 +961,7 @@ async function handleCallbackQuery(
         });
       }
       await admin.from("ppob_transactions").insert({
+        server_id: bot.serverId,
         trx_id: trxId,
         reseller_id: resellerId,
         telegram_id: telegramId,
@@ -955,6 +984,7 @@ async function handleCallbackQuery(
     }
 
     await admin.from("ppob_transactions").insert({
+      server_id: bot.serverId,
       trx_id: trxId,
       reseller_id: resellerId,
       telegram_id: telegramId,
@@ -991,11 +1021,11 @@ async function handleCallbackQuery(
     // Non-blocking owner notification (replaces legacy sleep(20) blocking call)
     const notifyOwner = async () => {
       if (!bot.ownerTelegramId) return;
-      const latestBal = await getPortalPulsaBalance();
+      const latestBal = await getPortalPulsaBalance(bot.serverId);
       await sendTelegramMessage({
         token: bot.token,
         chatId: bot.ownerTelegramId,
-        text: `📲 <b>Laporan PPOB</b>\nReseller: <code>${telegramId}</code>\nProduk: ${escapeHtml(product.code)} → <code>${escapeHtml(phone)}</code>\nJual: ${formatIDR(finalSell)} | Laba: ${formatIDR(profit)}\nSaldo API PortalPulsa: ${latestBal.ok ? formatIDR(latestBal.balance) : "N/A"}`,
+        text: `📲 <b>Laporan PPOB (${escapeHtml(bot.serverName)})</b>\nReseller: <code>${telegramId}</code>\nProduk: ${escapeHtml(product.code)} → <code>${escapeHtml(phone)}</code>\nJual: ${formatIDR(finalSell)} | Laba: ${formatIDR(profit)}\nSaldo API PortalPulsa: ${latestBal.ok ? formatIDR(latestBal.balance) : "N/A"}`,
       });
     };
 
@@ -1049,9 +1079,10 @@ async function handleMessage(
 
   // --- PUBLIC & RESELLER COMMANDS ---
   if (cmd === "/start") {
-    const r = await getReseller(admin, telegramId);
+    const r = await getReseller(admin, bot.serverId, telegramId);
     const tpl = await getTemplate(
       admin,
+      bot.serverId,
       r ? "welcome_registered" : "welcome_unregistered",
       {
         username: `@${r?.username ?? tgUsername}`,
@@ -1108,7 +1139,7 @@ async function handleMessage(
   }
 
   if (cmd === "/cekid") {
-    const r = await getReseller(admin, telegramId);
+    const r = await getReseller(admin, bot.serverId, telegramId);
     await sendTelegramMessage({
       token: bot.token,
       chatId,
@@ -1118,7 +1149,7 @@ async function handleMessage(
   }
 
   if (cmd === "/daftar") {
-    const existing = await getReseller(admin, telegramId);
+    const existing = await getReseller(admin, bot.serverId, telegramId);
     if (existing) {
       await sendTelegramMessage({
         token: bot.token,
@@ -1128,6 +1159,7 @@ async function handleMessage(
       return;
     }
     const { error } = await admin.from("resellers").insert({
+      server_id: bot.serverId,
       telegram_id: telegramId,
       username: tgUsername,
       balance: 0,
@@ -1150,7 +1182,7 @@ async function handleMessage(
   }
 
   if (cmd === "/ceksaldo" || cmd === "/lihatsaldo") {
-    const r = await getReseller(admin, telegramId);
+    const r = await getReseller(admin, bot.serverId, telegramId);
     if (!r) {
       await sendTelegramMessage({
         token: bot.token,
@@ -1176,7 +1208,7 @@ async function handleMessage(
       });
       return;
     }
-    const r = await getReseller(admin, telegramId);
+    const r = await getReseller(admin, bot.serverId, telegramId);
     if (!r) {
       await sendTelegramMessage({
         token: bot.token,
@@ -1196,7 +1228,7 @@ async function handleMessage(
   }
 
   if (cmd === "/deposit") {
-    const r = await getReseller(admin, telegramId);
+    const r = await getReseller(admin, bot.serverId, telegramId);
     if (!r) {
       await sendTelegramMessage({
         token: bot.token,
@@ -1223,7 +1255,7 @@ async function handleMessage(
         }))
       );
     }
-    const tpl = await getTemplate(admin, "deposit_instructions", {
+    const tpl = await getTemplate(admin, bot.serverId, "deposit_instructions", {
       max_deposit: formatIDR(bot.maxDepositAmount),
     });
     await sendTelegramMessage({
@@ -1247,7 +1279,7 @@ async function handleMessage(
       });
       return;
     }
-    const r = await getReseller(admin, telegramId);
+    const r = await getReseller(admin, bot.serverId, telegramId);
     if (!r) {
       await sendTelegramMessage({
         token: bot.token,
@@ -1259,7 +1291,9 @@ async function handleMessage(
     await sendTelegramChatAction({ token: bot.token, chatId });
 
     if (cmd === "/pulsa" && args.length === 0) {
-      const cat = await getPortalPulsaCatalog("PULSA");
+      const cat = await getPortalPulsaCatalog("PULSA", {
+        serverId: bot.serverId,
+      });
       if (!cat.ok) {
         await sendTelegramMessage({
           token: bot.token,
@@ -1296,7 +1330,10 @@ async function handleMessage(
     const category =
       cmd === "/pln" ? "PLN" : cmd === "/game" ? "GAME" : "PULSA";
     const keyword = args.join(" ");
-    const cat = await getPortalPulsaCatalog(category, { keyword });
+    const cat = await getPortalPulsaCatalog(category, {
+      keyword,
+      serverId: bot.serverId,
+    });
     if (!cat.ok) {
       await sendTelegramMessage({
         token: bot.token,
@@ -1335,7 +1372,7 @@ async function handleMessage(
       });
       return;
     }
-    const r = await getReseller(admin, telegramId);
+    const r = await getReseller(admin, bot.serverId, telegramId);
     if (!r) {
       await sendTelegramMessage({
         token: bot.token,
@@ -1346,12 +1383,13 @@ async function handleMessage(
     }
     await admin.from("bot_user_states").upsert(
       {
+        server_id: bot.serverId,
         telegram_id: telegramId,
         step: "waiting_phone",
         payload: {},
         expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
       },
-      { onConflict: "telegram_id" }
+      { onConflict: "server_id,telegram_id" }
     );
     await sendTelegramMessage({
       token: bot.token,
@@ -1416,12 +1454,13 @@ async function handleMessage(
       }
       const { error } = await admin.from("resellers").upsert(
         {
+          server_id: bot.serverId,
           telegram_id: targetId,
           username: name.replace(/^@/, ""),
           phone: phone || null,
           status: "active",
         },
-        { onConflict: "telegram_id" }
+        { onConflict: "server_id,telegram_id" }
       );
       if (error) {
         await sendTelegramMessage({
@@ -1432,7 +1471,8 @@ async function handleMessage(
         return;
       }
       if (saldo > 0) {
-        await admin.rpc("rpc_adjust_balance", {
+        await admin.rpc("rpc_adjust_balance_v2", {
+          p_server_id: bot.serverId,
           p_telegram_id: targetId,
           p_delta: saldo,
           p_tx_type: "topup",
@@ -1460,7 +1500,8 @@ async function handleMessage(
         return;
       }
       const isTopup = cmd === "/topup";
-      const { data: rpcRes, error } = await admin.rpc("rpc_adjust_balance", {
+      const { data: rpcRes, error } = await admin.rpc("rpc_adjust_balance_v2", {
+        p_server_id: bot.serverId,
         p_telegram_id: targetId,
         p_delta: isTopup ? nominal : -nominal,
         p_tx_type: isTopup ? "topup" : "topdown",
@@ -1492,7 +1533,7 @@ async function handleMessage(
 
     if (cmd === "/resource") {
       try {
-        const adapter = await getDefaultMikroTikAdapter();
+        const adapter = await getDefaultMikroTikAdapter(bot.routerId ?? undefined);
         const st = await adapter.getSystemStatus();
         const freeRamMb = Math.round(st.resource.freeMemoryBytes / 1048576);
         const totalRamMb = Math.round(st.resource.totalMemoryBytes / 1048576);
@@ -1525,7 +1566,7 @@ async function handleMessage(
 
     if (cmd === "/hotspot") {
       try {
-        const adapter = await getDefaultMikroTikAdapter();
+        const adapter = await getDefaultMikroTikAdapter(bot.routerId ?? undefined);
         const sub = (args[0] ?? "aktif").toLowerCase();
         if (sub === "user") {
           const users = await adapter.listHotspotUsers();
@@ -1577,7 +1618,7 @@ async function handleMessage(
         return;
       }
       try {
-        const adapter = await getDefaultMikroTikAdapter();
+        const adapter = await getDefaultMikroTikAdapter(bot.routerId ?? undefined);
         const users = await adapter.listHotspotUsers();
         const u = users.find((x) => x.name === targetUser);
         if (!u) {
@@ -1605,7 +1646,7 @@ async function handleMessage(
 
     if (cmd === "/netwatch") {
       try {
-        const adapter = await getDefaultMikroTikAdapter();
+        const adapter = await getDefaultMikroTikAdapter(bot.routerId ?? undefined);
         const hosts = await adapter.listNetwatch();
         const lines = [
           `<b>📡 Status Netwatch (${hosts.length})</b>`,
@@ -1637,14 +1678,17 @@ async function handleMessage(
         admin
           .from("wallet_transactions")
           .select("tx_type, amount, voucher_price, status")
+          .eq("server_id", bot.serverId)
           .gte("created_at", monthStart),
         admin
           .from("ppob_transactions")
           .select("sell_price, profit, status")
+          .eq("server_id", bot.serverId)
           .gte("created_at", monthStart),
         admin
           .from("resellers")
           .select("*", { count: "exact", head: true })
+          .eq("server_id", bot.serverId)
           .gte("joined_at", monthStart),
       ]);
 
@@ -1669,7 +1713,7 @@ async function handleMessage(
         token: bot.token,
         chatId,
         text: [
-          `<b>📊 Laporan Bulan Ini</b>`,
+          `<b>📊 Laporan Bulan Ini (${escapeHtml(bot.serverName)})</b>`,
           `<code>========================</code>`,
           `Voucher Terjual : <b>${voucherTxs.length.toLocaleString("id-ID")}</b>`,
           `Omset Voucher   : <b>${formatIDR(voucherRevenue)}</b>`,
@@ -1684,7 +1728,7 @@ async function handleMessage(
     }
 
     if (cmd === "/saldoportal") {
-      const bal = await getPortalPulsaBalance();
+      const bal = await getPortalPulsaBalance(bot.serverId);
       await sendTelegramMessage({
         token: bot.token,
         chatId,
@@ -1700,6 +1744,7 @@ async function handleMessage(
   const { data: stateRow } = await admin
     .from("bot_user_states")
     .select("step, payload, expires_at")
+    .eq("server_id", bot.serverId)
     .eq("telegram_id", telegramId)
     .maybeSingle();
 
@@ -1725,6 +1770,7 @@ async function handleMessage(
         payload: { phone },
         expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
       })
+      .eq("server_id", bot.serverId)
       .eq("telegram_id", telegramId);
 
     await sendTelegramMessage({
@@ -1739,7 +1785,7 @@ async function handleMessage(
     const code = rawText.toUpperCase();
     const payload = (stateRow.payload ?? {}) as { phone?: string };
     const phone = payload.phone ?? "";
-    const product = await findPortalPulsaProduct(code);
+    const product = await findPortalPulsaProduct(code, bot.serverId);
 
     if (!product) {
       await sendTelegramMessage({
@@ -1750,7 +1796,7 @@ async function handleMessage(
       return;
     }
 
-    const r = await getReseller(admin, telegramId);
+    const r = await getReseller(admin, bot.serverId, telegramId);
     await admin
       .from("bot_user_states")
       .update({
@@ -1758,6 +1804,7 @@ async function handleMessage(
         payload: { phone, code: product.code, sellPrice: product.sellPrice },
         expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
       })
+      .eq("server_id", bot.serverId)
       .eq("telegram_id", telegramId);
 
     await sendTelegramMessage({

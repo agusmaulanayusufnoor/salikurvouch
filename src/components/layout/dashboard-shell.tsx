@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { toast } from "sonner";
 import {
   LayoutDashboard,
   Users,
@@ -30,13 +31,18 @@ import {
   Terminal,
   Laptop,
   Link2,
+  Server,
+  Plus,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { ServerSummary } from "@/lib/server-context";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ThemeModeToggle } from "@/components/layout/theme-switcher";
 import { logoutAction } from "@/app/(auth)/login/actions";
+import { switchActiveServerAction } from "@/app/(dashboard)/server-actions";
 
 interface NavItem {
   label: string;
@@ -106,6 +112,12 @@ const NAV_GROUPS: NavGroup[] = [
     title: "Konfigurasi",
     items: [
       {
+        label: "Kelola Server",
+        href: "/settings/servers",
+        icon: Server,
+        adminOnly: true,
+      },
+      {
         label: "Router, Bot & PPOB",
         href: "/settings",
         icon: Settings,
@@ -136,14 +148,41 @@ export interface DashboardUser {
 
 export function DashboardShell({
   user,
+  servers,
+  activeServerId,
   children,
 }: {
   user: DashboardUser;
+  servers: ServerSummary[];
+  activeServerId: string;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [isSwitching, startSwitch] = useTransition();
   const isAdmin = user.role === "super_admin" || user.role === "admin";
+  const activeServer =
+    servers.find((s) => s.id === activeServerId) ?? servers[0] ?? null;
+
+  function handleSwitchServer(nextServerId: string) {
+    if (nextServerId === "__add_new__") {
+      setMobileOpen(false);
+      router.push("/settings/servers");
+      return;
+    }
+    if (!nextServerId || nextServerId === activeServerId) return;
+    startSwitch(async () => {
+      const res = await switchActiveServerAction(nextServerId);
+      if (res.ok) {
+        toast.success(res.message ?? "Server aktif diperbarui.");
+        setMobileOpen(false);
+        router.refresh();
+      } else {
+        toast.error(res.message ?? "Gagal mengganti server.");
+      }
+    });
+  }
 
   const sidebarContent = (
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
@@ -163,6 +202,54 @@ export function DashboardShell({
           <p className="truncate text-xs text-sidebar-foreground/75">
             MikroTik &amp; PPOB Suite
           </p>
+        </div>
+      </div>
+
+      {/* Multi-Server Switcher */}
+      <div className="px-3 pb-3">
+        <div className="rounded-lg border border-sidebar-border bg-sidebar-accent/45 p-2">
+          <div className="mb-1 flex items-center justify-between gap-1 text-[10px] font-semibold tracking-wider text-sidebar-foreground/80 uppercase">
+            <span className="flex items-center gap-1">
+              <Server className="size-3" />
+              Server Aktif
+            </span>
+            {isSwitching ? (
+              <Loader2 className="size-3 animate-spin" />
+            ) : activeServer?.botUsername ? (
+              <span className="truncate font-mono normal-case opacity-90">
+                @{activeServer.botUsername}
+              </span>
+            ) : null}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <select
+              aria-label="Pilih server aktif"
+              value={activeServer?.id ?? ""}
+              disabled={isSwitching || servers.length === 0}
+              onChange={(e) => handleSwitchServer(e.target.value)}
+              className="h-8 min-w-0 flex-1 rounded-md border border-sidebar-border bg-sidebar-primary px-2 text-xs font-semibold text-sidebar-primary-foreground outline-none focus:ring-2 focus:ring-sidebar-ring disabled:opacity-60"
+            >
+              {servers.map((srv) => (
+                <option key={srv.id} value={srv.id}>
+                  {srv.name}
+                  {srv.routerPort ? ` (:${srv.routerPort})` : ""}
+                </option>
+              ))}
+              {isAdmin ? (
+                <option value="__add_new__">+ Tambah Server Baru...</option>
+              ) : null}
+            </select>
+            {isAdmin ? (
+              <Link
+                href="/settings/servers"
+                onClick={() => setMobileOpen(false)}
+                title="Kelola / Tambah Server"
+                className="flex size-8 shrink-0 items-center justify-center rounded-md border border-sidebar-border bg-sidebar-primary text-sidebar-primary-foreground transition-opacity hover:opacity-90"
+              >
+                <Plus className="size-3.5" />
+              </Link>
+            ) : null}
+          </div>
         </div>
       </div>
 
@@ -283,10 +370,15 @@ export function DashboardShell({
             >
               <Menu className="size-5" />
             </Button>
-            <div>
+            <div className="flex items-center gap-2">
               <h1 className="text-sm font-semibold text-foreground sm:text-base">
                 Panel Operasional SalikurVouch
               </h1>
+              {activeServer ? (
+                <Badge variant="secondary" className="hidden font-mono text-[11px] sm:inline-flex">
+                  {activeServer.name}
+                </Badge>
+              ) : null}
             </div>
           </div>
 

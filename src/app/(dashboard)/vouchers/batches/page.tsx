@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Printer, Plus, ChevronLeft, ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getActiveServer } from "@/lib/server-context";
 import { formatDateTimeID, formatIDR } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -33,13 +34,17 @@ export default async function VoucherBatchesPage({
   const page = Math.max(1, Number(sp.page) || 1);
   const pageSize = 25;
 
-  const supabase = await createClient();
+  const [supabase, activeServer] = await Promise.all([
+    createClient(),
+    getActiveServer(),
+  ]);
   const { data: batches, count } = await supabase
     .from("voucher_batches")
     .select(
       "id, batch_code, source, package_name, unit_price, quantity, deducted_balance, telegram_sent, telegram_error, created_at, resellers(username, telegram_id)",
       { count: "exact" }
     )
+    .eq("server_id", activeServer?.id ?? "")
     .order("created_at", { ascending: false })
     .range((page - 1) * pageSize, page * pageSize - 1);
 

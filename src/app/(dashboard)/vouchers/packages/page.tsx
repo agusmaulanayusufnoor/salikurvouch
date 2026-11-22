@@ -1,4 +1,5 @@
 import { getAuthenticatedStaff } from "@/lib/auth";
+import { getActiveServer } from "@/lib/server-context";
 import { createClient } from "@/lib/supabase/server";
 import { PackagesClient, type VoucherPackageRow } from "./packages-client";
 
@@ -7,26 +8,20 @@ export const metadata = {
 };
 
 export default async function VoucherPackagesPage() {
-  const [staff, supabase] = await Promise.all([
+  const [staff, supabase, activeServer] = await Promise.all([
     getAuthenticatedStaff(),
     createClient(),
+    getActiveServer(),
   ]);
 
-  const [pkgRes, routerRes] = await Promise.all([
-    supabase
-      .from("voucher_packages")
-      .select("*")
-      .order("sort_order", { ascending: true })
-      .order("price", { ascending: true }),
-    supabase
-      .from("routers")
-      .select("id")
-      .order("is_default", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-  ]);
+  const { data: pkgData } = await supabase
+    .from("voucher_packages")
+    .select("*")
+    .eq("server_id", activeServer?.id ?? "")
+    .order("sort_order", { ascending: true })
+    .order("price", { ascending: true });
 
-  const packages: VoucherPackageRow[] = (pkgRes.data ?? []).map((p) => ({
+  const packages: VoucherPackageRow[] = (pkgData ?? []).map((p) => ({
     id: p.id,
     router_id: p.router_id,
     mode: p.mode as "saldo" | "nonsaldo",
@@ -62,7 +57,7 @@ export default async function VoucherPackagesPage() {
 
       <PackagesClient
         packages={packages}
-        defaultRouterId={routerRes.data?.id ?? null}
+        defaultRouterId={activeServer?.router_id ?? null}
         isAdmin={staff?.role === "super_admin" || staff?.role === "admin"}
       />
     </div>

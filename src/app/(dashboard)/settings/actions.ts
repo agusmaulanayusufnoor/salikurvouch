@@ -5,8 +5,9 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
 import { encryptSecret } from "@/lib/crypto";
+import { getActiveServer } from "@/lib/server-context";
 import { createClient } from "@/lib/supabase/server";
-import type { TablesInsert, TablesUpdate } from "@/lib/supabase/types";
+import type { TablesUpdate } from "@/lib/supabase/types";
 import {
   deleteTelegramWebhook,
   getBotTokenFromSettings,
@@ -38,7 +39,10 @@ export async function saveRouterSettingsAction(
   try {
     await requireAdmin();
   } catch {
-    return { ok: false, message: "Hanya admin yang dapat mengubah pengaturan router." };
+    return {
+      ok: false,
+      message: "Hanya admin yang dapat mengubah pengaturan router.",
+    };
   }
 
   const parsed = routerSchema.safeParse({
@@ -65,14 +69,17 @@ export async function saveRouterSettingsAction(
   if (v.ros_version === "v6" && v.connection_mode === "rest_api") {
     return {
       ok: false,
-      message: "REST API hanya didukung oleh RouterOS v7. Pilih api_tcp atau api_ssl untuk ROS v6.",
+      message:
+        "REST API hanya didukung oleh RouterOS v7. Pilih api_tcp atau api_ssl untuk ROS v6.",
     };
   }
 
+  const activeServer = await getActiveServer();
   const supabase = await createClient();
 
   try {
-    if (v.id) {
+    const targetRouterId = v.id || activeServer.router_id || "";
+    if (targetRouterId) {
       const updatePayload: TablesUpdate<"routers"> = {
         name: v.name,
         host: v.host,
@@ -90,7 +97,7 @@ export async function saveRouterSettingsAction(
       const { error } = await supabase
         .from("routers")
         .update(updatePayload)
-        .eq("id", v.id);
+        .eq("id", targetRouterId);
       if (error) throw error;
     } else {
       if (!v.password) {
@@ -99,27 +106,37 @@ export async function saveRouterSettingsAction(
           message: "Password MikroTik wajib diisi untuk router baru.",
         };
       }
-      const { error } = await supabase.from("routers").insert({
-        name: v.name,
-        host: v.host,
-        port: v.port,
-        ros_version: v.ros_version,
-        connection_mode: v.connection_mode,
-        allow_self_signed_tls: v.allow_self_signed_tls,
-        username: v.username,
-        password_encrypted: encryptSecret(v.password),
-        dns_name: v.dns_name,
-        is_default: true,
-        is_active: true,
-      });
+      const { data: inserted, error } = await supabase
+        .from("routers")
+        .insert({
+          name: v.name,
+          host: v.host,
+          port: v.port,
+          ros_version: v.ros_version,
+          connection_mode: v.connection_mode,
+          allow_self_signed_tls: v.allow_self_signed_tls,
+          username: v.username,
+          password_encrypted: encryptSecret(v.password),
+          dns_name: v.dns_name,
+          is_default: activeServer.is_default,
+          is_active: true,
+        })
+        .select("id")
+        .single();
       if (error) throw error;
+
+      await supabase
+        .from("servers")
+        .update({ router_id: inserted.id })
+        .eq("id", activeServer.id);
     }
 
     revalidatePath("/settings");
+    revalidatePath("/settings/servers");
     revalidatePath("/");
     return {
       ok: true,
-      message: "Pengaturan Router MikroTik berhasil disimpan (password terenkripsi AES-256-GCM).",
+      message: `Pengaturan Router MikroTik (${activeServer.name}) berhasil disimpan (password terenkripsi AES-256-GCM).`,
     };
   } catch (err) {
     return {
@@ -150,7 +167,10 @@ export async function saveAppSettingsAction(
   try {
     await requireAdmin();
   } catch {
-    return { ok: false, message: "Hanya admin yang dapat mengubah pengaturan." };
+    return {
+      ok: false,
+      message: "Hanya admin yang dapat mengubah pengaturan.",
+    };
   }
 
   const parsed = appSettingsSchema.safeParse({
@@ -171,7 +191,8 @@ export async function saveAppSettingsAction(
   if (!parsed.success) {
     return {
       ok: false,
-      message: parsed.error.issues[0]?.message ?? "Input pengaturan tidak valid.",
+      message:
+        parsed.error.issues[0]?.message ?? "Input pengaturan tidak valid.",
     };
   }
 
@@ -180,8 +201,14 @@ export async function saveAppSettingsAction(
     ? Number(v.owner_telegram_id.replace(/[^\d-]/g, ""))
     : null;
 
-  if (v.owner_telegram_id && (!ownerIdNum || !Number.isSafeInteger(ownerIdNum))) {
-    return { ok: false, message: "Owner Telegram ID harus berupa angka valid." };
+  if (
+    v.owner_telegram_id &&
+    (!ownerIdNum || !Number.isSafeInteger(ownerIdNum))
+  ) {
+    return {
+      ok: false,
+      message: "Owner Telegram ID harus berupa angka valid.",
+    };
   }
 
   if (v.ppob_proxy_url && !/^https?:\/\//i.test(v.ppob_proxy_url)) {
@@ -191,15 +218,13 @@ export async function saveAppSettingsAction(
     };
   }
 
+  const activeServer = await getActiveServer();
   const supabase = await createClient();
-  const { data: current } = await supabase
-    .from("app_settings")
-    .select("webhook_secret")
-    .eq("id", 1)
-    .maybeSingle();
 
-  const payload: TablesInsert<"app_settings"> = {
-    id: 1,
+  const secret =
+    activeServer.webhook_secret || crypto.randomBytes(24).toString("hex");
+
+  const serverPatch: TablesUpdate<"servers"> = {
     bot_username: v.bot_username ? v.bot_username.replace(/^@/, "") : null,
     bot_mode: v.bot_mode,
     owner_username: v.owner_username
@@ -213,26 +238,57 @@ export async function saveAppSettingsAction(
     ppob_markup_large_pct: v.ppob_markup_large_pct,
     ppob_markup_threshold: v.ppob_markup_threshold,
     ppob_proxy_url: v.ppob_proxy_url || null,
-    webhook_secret:
-      current?.webhook_secret || crypto.randomBytes(24).toString("hex"),
+    webhook_secret: secret,
   };
 
   if (v.bot_token && v.bot_token.length > 0) {
-    payload.bot_token_encrypted = encryptSecret(v.bot_token);
+    serverPatch.bot_token_encrypted = encryptSecret(v.bot_token);
   }
 
   const { error } = await supabase
-    .from("app_settings")
-    .upsert(payload, { onConflict: "id" });
+    .from("servers")
+    .update(serverPatch)
+    .eq("id", activeServer.id);
 
   if (error) {
     return { ok: false, message: error.message };
   }
 
+  // Keep legacy app_settings id=1 synced for Server 1 backward compatibility
+  if (activeServer.is_default) {
+    await supabase
+      .from("app_settings")
+      .upsert(
+        {
+          id: 1,
+          bot_username: serverPatch.bot_username,
+          bot_mode: v.bot_mode,
+          owner_username: serverPatch.owner_username,
+          owner_telegram_id: ownerIdNum,
+          max_deposit_amount: v.max_deposit_amount,
+          low_balance_threshold: v.low_balance_threshold,
+          ppob_enabled: v.ppob_enabled,
+          ppob_markup_small_pct: v.ppob_markup_small_pct,
+          ppob_markup_large_pct: v.ppob_markup_large_pct,
+          ppob_markup_threshold: v.ppob_markup_threshold,
+          ppob_proxy_url: v.ppob_proxy_url || null,
+          webhook_secret: secret,
+          ...(serverPatch.bot_token_encrypted
+            ? { bot_token_encrypted: serverPatch.bot_token_encrypted }
+            : {}),
+        },
+        { onConflict: "id" }
+      );
+  }
+
   revalidatePath("/settings");
+  revalidatePath("/settings/servers");
   revalidatePath("/settings/webhook");
-  revalidatePath("/");
-  return { ok: true, message: "Pengaturan Bot Telegram & PPOB berhasil disimpan." };
+  revalidatePath("/", "layout");
+  return {
+    ok: true,
+    message: `Pengaturan Bot Telegram & PPOB (${activeServer.name}) berhasil disimpan.`,
+  };
 }
 
 const templateSchema = z.object({
@@ -240,7 +296,10 @@ const templateSchema = z.object({
     .string()
     .trim()
     .min(2)
-    .regex(/^[a-z0-9_]+$/, "Key hanya boleh huruf kecil, angka, dan underscore."),
+    .regex(
+      /^[a-z0-9_]+$/,
+      "Key hanya boleh huruf kecil, angka, dan underscore."
+    ),
   label: z.string().trim().min(2, "Judul template wajib diisi."),
   content: z.string().trim().min(1, "Isi pesan tidak boleh kosong.").max(4096),
 });
@@ -251,7 +310,10 @@ export async function upsertTemplateAction(
   try {
     await requireAdmin();
   } catch {
-    return { ok: false, message: "Hanya admin yang dapat mengelola template pesan." };
+    return {
+      ok: false,
+      message: "Hanya admin yang dapat mengelola template pesan.",
+    };
   }
 
   const parsed = templateSchema.safeParse({
@@ -267,28 +329,40 @@ export async function upsertTemplateAction(
     };
   }
 
+  const activeServer = await getActiveServer();
   const supabase = await createClient();
   const { error } = await supabase
     .from("bot_message_templates")
-    .upsert(parsed.data, { onConflict: "key" });
+    .upsert(
+      { ...parsed.data, server_id: activeServer.id },
+      { onConflict: "server_id,key" }
+    );
 
   if (error) return { ok: false, message: error.message };
 
   revalidatePath("/settings/templates");
-  return { ok: true, message: `Template "${parsed.data.label}" berhasil disimpan.` };
+  return {
+    ok: true,
+    message: `Template "${parsed.data.label}" berhasil disimpan.`,
+  };
 }
 
 export async function deleteTemplateAction(key: string): Promise<ActionResult> {
   try {
     await requireAdmin();
   } catch {
-    return { ok: false, message: "Hanya admin yang dapat menghapus template." };
+    return {
+      ok: false,
+      message: "Hanya admin yang dapat menghapus template.",
+    };
   }
 
+  const activeServer = await getActiveServer();
   const supabase = await createClient();
   const { error } = await supabase
     .from("bot_message_templates")
     .delete()
+    .eq("server_id", activeServer.id)
     .eq("key", key);
 
   if (error) return { ok: false, message: error.message };
@@ -315,11 +389,12 @@ export async function setWebhookAction(
     };
   }
 
-  const botConfig = await getBotTokenFromSettings();
+  const activeServer = await getActiveServer();
+  const botConfig = await getBotTokenFromSettings(activeServer.id);
   if (!botConfig) {
     return {
       ok: false,
-      message: "Bot Token Telegram belum diatur di Pengaturan.",
+      message: `Bot Token Telegram untuk ${activeServer.name} belum diatur di Pengaturan.`,
     };
   }
 
@@ -328,9 +403,15 @@ export async function setWebhookAction(
     secret = crypto.randomBytes(24).toString("hex");
     const supabase = await createClient();
     await supabase
-      .from("app_settings")
+      .from("servers")
       .update({ webhook_secret: secret })
-      .eq("id", 1);
+      .eq("id", activeServer.id);
+    if (activeServer.is_default) {
+      await supabase
+        .from("app_settings")
+        .update({ webhook_secret: secret })
+        .eq("id", 1);
+    }
   }
 
   try {
@@ -349,12 +430,13 @@ export async function setWebhookAction(
     revalidatePath("/settings/webhook");
     return {
       ok: true,
-      message: "Webhook Telegram berhasil didaftarkan beserta secret_token.",
+      message: `Webhook Telegram (@${botConfig.botUsername ?? activeServer.slug}) berhasil didaftarkan.`,
     };
   } catch (err) {
     return {
       ok: false,
-      message: err instanceof Error ? err.message : "Gagal menghubungi Telegram API.",
+      message:
+        err instanceof Error ? err.message : "Gagal menghubungi Telegram API.",
     };
   }
 }
@@ -365,10 +447,14 @@ export async function unsetWebhookAction(
   try {
     await requireAdmin();
   } catch {
-    return { ok: false, message: "Hanya admin yang dapat menonaktifkan webhook." };
+    return {
+      ok: false,
+      message: "Hanya admin yang dapat menonaktifkan webhook.",
+    };
   }
 
-  const botConfig = await getBotTokenFromSettings();
+  const activeServer = await getActiveServer();
+  const botConfig = await getBotTokenFromSettings(activeServer.id);
   if (!botConfig) {
     return { ok: false, message: "Bot Token Telegram belum diatur." };
   }
@@ -389,7 +475,8 @@ export async function unsetWebhookAction(
   } catch (err) {
     return {
       ok: false,
-      message: err instanceof Error ? err.message : "Gagal menghubungi Telegram API.",
+      message:
+        err instanceof Error ? err.message : "Gagal menghubungi Telegram API.",
     };
   }
 }
@@ -403,14 +490,22 @@ export async function regenerateWebhookSecretAction(): Promise<
     return { ok: false, message: "Forbidden" };
   }
 
+  const activeServer = await getActiveServer();
   const newSecret = crypto.randomBytes(24).toString("hex");
   const supabase = await createClient();
   const { error } = await supabase
-    .from("app_settings")
+    .from("servers")
     .update({ webhook_secret: newSecret })
-    .eq("id", 1);
+    .eq("id", activeServer.id);
 
   if (error) return { ok: false, message: error.message };
+
+  if (activeServer.is_default) {
+    await supabase
+      .from("app_settings")
+      .update({ webhook_secret: newSecret })
+      .eq("id", 1);
+  }
 
   revalidatePath("/settings/webhook");
   return {

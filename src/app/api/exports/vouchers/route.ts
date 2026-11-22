@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { getAuthenticatedStaff } from "@/lib/auth";
+import { getActiveServer } from "@/lib/server-context";
 import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -27,7 +28,10 @@ export async function GET(request: Request) {
   const to = searchParams.get("to")?.trim() || "";
   const q = searchParams.get("q")?.trim() || "";
 
-  const supabase = await createClient();
+  const [supabase, activeServer] = await Promise.all([
+    createClient(),
+    getActiveServer(),
+  ]);
 
   let query = supabase
     .from("wallet_transactions")
@@ -37,6 +41,7 @@ export async function GET(request: Request) {
     .order("created_at", { ascending: false })
     .limit(10000);
 
+  if (activeServer) query = query.eq("server_id", activeServer.id);
   if (resellerId) query = query.eq("reseller_id", resellerId);
   if (txType && txType !== "all") query = query.eq("tx_type", txType);
   if (from) query = query.gte("created_at", `${from}T00:00:00+07:00`);
@@ -58,7 +63,8 @@ export async function GET(request: Request) {
 
   const list = rows ?? [];
   const stamp = new Date().toISOString().slice(0, 10);
-  const baseName = `salikurvouch-mutasi-${stamp}`;
+  const slugPart = activeServer?.slug ? `-${activeServer.slug}` : "";
+  const baseName = `salikurvouch${slugPart}-mutasi-${stamp}`;
 
   if (format === "csv") {
     const headers = [

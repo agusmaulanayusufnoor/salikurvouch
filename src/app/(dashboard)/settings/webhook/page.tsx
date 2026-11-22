@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getAuthenticatedStaff } from "@/lib/auth";
+import { getActiveServer } from "@/lib/server-context";
 import {
   getBotTokenFromSettings,
   getTelegramWebhookInfo,
@@ -18,12 +19,14 @@ export default async function WebhookPage() {
     redirect("/");
   }
 
+  const activeServer = await getActiveServer(undefined, staff);
   const hdrs = await headers();
-  const host = hdrs.get("x-forwarded-host") ?? hdrs.get("host") ?? "salikurvouch.vercel.app";
+  const host =
+    hdrs.get("x-forwarded-host") ?? hdrs.get("host") ?? "app.salikur.net";
   const proto = hdrs.get("x-forwarded-proto") ?? "https";
-  const defaultWebhookUrl = `${proto}://${host}/api/telegram/webhook`;
+  const defaultWebhookUrl = `${proto}://${host}/api/telegram/webhook/${activeServer.slug}`;
 
-  const botConfig = await getBotTokenFromSettings();
+  const botConfig = await getBotTokenFromSettings(activeServer.id);
 
   let webhookInfo: TelegramWebhookInfo | null = null;
   let webhookError: string | null = null;
@@ -46,15 +49,22 @@ export default async function WebhookPage() {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold tracking-tight">
-          Telegram Webhook Manager
+          Telegram Webhook Manager — {activeServer.name}
         </h2>
         <p className="text-sm text-muted-foreground">
-          Daftarkan, verifikasi, dan pantau status live webhook bot Telegram
-          dengan keamanan `secret_token`.
+          Daftarkan, verifikasi, dan pantau status live webhook bot{" "}
+          <strong>
+            {botConfig?.botUsername
+              ? `@${botConfig.botUsername}`
+              : activeServer.slug}
+          </strong>{" "}
+          dengan endpoint khusus{" "}
+          <code>/api/telegram/webhook/{activeServer.slug}</code>.
         </p>
       </div>
 
       <WebhookClient
+        key={activeServer.id}
         defaultWebhookUrl={defaultWebhookUrl}
         botUsername={botConfig?.botUsername ?? null}
         hasBotToken={Boolean(botConfig)}

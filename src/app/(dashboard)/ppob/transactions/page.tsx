@@ -9,6 +9,7 @@ import {
   Coins,
 } from "lucide-react";
 import { getAuthenticatedStaff } from "@/lib/auth";
+import { getActiveServer } from "@/lib/server-context";
 import { createClient } from "@/lib/supabase/server";
 import { formatIDR } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -48,16 +49,19 @@ export default async function PpobTransactionsPage({
   const status = sp.status || "all";
   const q = sp.q?.trim() || "";
 
-  const [staff, supabase] = await Promise.all([
+  const [staff, supabase, activeServer] = await Promise.all([
     getAuthenticatedStaff(),
     createClient(),
+    getActiveServer(),
   ]);
+  const serverId = activeServer?.id ?? "";
 
   let txQuery = supabase
     .from("ppob_transactions")
     .select(
       "id, trx_id, reseller_id, telegram_id, product_code, target_number, customer_id, cost_price, sell_price, profit, status, serial_number, description, source, raw_response, created_at, resellers(username)"
     )
+    .eq("server_id", serverId)
     .order("created_at", { ascending: false })
     .limit(200);
 
@@ -77,6 +81,7 @@ export default async function PpobTransactionsPage({
     supabase
       .from("resellers")
       .select("id, username, telegram_id")
+      .eq("server_id", serverId)
       .order("username", { ascending: true }),
   ]);
 

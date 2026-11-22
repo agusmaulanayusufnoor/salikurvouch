@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAdmin, requireStaff } from "@/lib/auth";
+import { getActiveServer } from "@/lib/server-context";
 import { createClient } from "@/lib/supabase/server";
 import { formatIDR } from "@/lib/utils";
 import {
@@ -55,9 +56,14 @@ export async function createResellerAction(
   }
 
   const v = parsed.data;
+  const activeServer = await getActiveServer();
+  if (!activeServer) {
+    return { ok: false, message: "Server aktif tidak ditemukan." };
+  }
   const supabase = await createClient();
 
   const { error } = await supabase.from("resellers").insert({
+    server_id: activeServer.id,
     telegram_id: v.telegram_id,
     username: v.username.replace(/^@/, ""),
     phone: v.phone || null,
@@ -70,14 +76,15 @@ export async function createResellerAction(
     if (error.code === "23505") {
       return {
         ok: false,
-        message: `Telegram ID ${v.telegram_id} sudah terdaftar sebagai reseller.`,
+        message: `Telegram ID ${v.telegram_id} sudah terdaftar sebagai reseller di server ${activeServer.name}.`,
       };
     }
     return { ok: false, message: error.message };
   }
 
   if (v.initial_balance > 0) {
-    const { error: rpcErr } = await supabase.rpc("rpc_adjust_balance", {
+    const { error: rpcErr } = await supabase.rpc("rpc_adjust_balance_v2", {
+      p_server_id: activeServer.id,
       p_telegram_id: v.telegram_id,
       p_delta: v.initial_balance,
       p_tx_type: "topup",
@@ -254,10 +261,15 @@ export async function adjustBalanceAction(
   }
 
   const v = parsed.data;
+  const activeServer = await getActiveServer();
+  if (!activeServer) {
+    return { ok: false, message: "Server aktif tidak ditemukan." };
+  }
   const delta = v.tx_type === "topup" ? v.amount : -v.amount;
   const supabase = await createClient();
 
-  const { data, error } = await supabase.rpc("rpc_adjust_balance", {
+  const { data, error } = await supabase.rpc("rpc_adjust_balance_v2", {
+    p_server_id: activeServer.id,
     p_telegram_id: v.telegram_id,
     p_delta: delta,
     p_tx_type: v.tx_type,
@@ -280,7 +292,7 @@ export async function adjustBalanceAction(
 
   let telegramNotice = "";
   if (v.notify_telegram) {
-    const bot = await getBotTokenFromSettings();
+    const bot = await getBotTokenFromSettings(activeServer.id);
     if (bot) {
       try {
         const title =
@@ -346,7 +358,7 @@ export async function processDepositRequestAction(params: {
   const { data: reqRow, error: fetchErr } = await supabase
     .from("deposit_requests")
     .select(
-      "id, amount, status, reseller_id, resellers(id, telegram_id, username)"
+      "id, server_id, amount, status, reseller_id, resellers(id, telegram_id, username)"
     )
     .eq("id", params.requestId)
     .maybeSingle();
@@ -380,8 +392,9 @@ export async function processDepositRequestAction(params: {
   let balanceAfter: number | null = null;
   if (params.decision === "approved") {
     const { data: rpcData, error: rpcErr } = await supabase.rpc(
-      "rpc_adjust_balance",
+      "rpc_adjust_balance_v2",
       {
+        p_server_id: reqRow.server_id,
         p_telegram_id: reseller.telegram_id,
         p_delta: finalAmount,
         p_tx_type: "topup",
@@ -408,7 +421,7 @@ export async function processDepositRequestAction(params: {
   if (updErr) return { ok: false, message: updErr.message };
 
   // Best-effort Telegram notification
-  const bot = await getBotTokenFromSettings();
+  const bot = await getBotTokenFromSettings(reqRow.server_id);
   if (bot) {
     try {
       const text =
@@ -458,8 +471,14 @@ export async function createManualDepositRequestAction(
     return { ok: false, message: "Pilih reseller dan isi nominal deposit > 0." };
   }
 
+  const activeServer = await getActiveServer();
+  if (!activeServer) {
+    return { ok: false, message: "Server aktif tidak ditemukan." };
+  }
+
   const supabase = await createClient();
   const { error } = await supabase.from("deposit_requests").insert({
+    server_id: activeServer.id,
     reseller_id: resellerId,
     amount,
     status: "pending",

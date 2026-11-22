@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getActiveServer } from "@/lib/server-context";
 import { formatDateTimeID, formatIDR } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -28,18 +29,24 @@ export default async function TopupPage({
   searchParams: Promise<{ tid?: string }>;
 }) {
   const sp = await searchParams;
-  const supabase = await createClient();
+  const [supabase, activeServer] = await Promise.all([
+    createClient(),
+    getActiveServer(),
+  ]);
+  const serverId = activeServer?.id ?? "";
 
   const [resellersRes, recentRes] = await Promise.all([
     supabase
       .from("resellers")
       .select("id, telegram_id, username, balance, status")
+      .eq("server_id", serverId)
       .order("username", { ascending: true }),
     supabase
       .from("wallet_transactions")
       .select(
         "id, seller_name, telegram_id, tx_type, amount, balance_after, topup_by, notes, created_at"
       )
+      .eq("server_id", serverId)
       .in("tx_type", ["topup", "topdown"])
       .order("created_at", { ascending: false })
       .limit(15),

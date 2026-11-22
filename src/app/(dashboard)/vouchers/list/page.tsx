@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AlertTriangle, RefreshCw, Ticket } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getActiveServer } from "@/lib/server-context";
 import { getDefaultMikroTikAdapter } from "@/lib/mikrotik/adapter";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,10 +26,14 @@ export default async function VoucherListPage() {
   let profiles: string[] = [];
   let servers: string[] = [];
 
-  const supabase = await createClient();
+  const [supabase, activeServer] = await Promise.all([
+    createClient(),
+    getActiveServer(),
+  ]);
   const resellersPromise = supabase
     .from("resellers")
     .select("id, telegram_id, username")
+    .eq("server_id", activeServer?.id ?? "")
     .eq("status", "active")
     .order("username", { ascending: true });
 

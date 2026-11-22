@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAdmin, requireStaff } from "@/lib/auth";
+import { getActiveServer } from "@/lib/server-context";
 import { createClient } from "@/lib/supabase/server";
 
 export type PpobActionResult = {
@@ -93,11 +94,16 @@ export async function savePpobTransactionAction(
 
     if (error) return { ok: false, message: error.message };
   } else {
+    const activeServer = await getActiveServer();
+    if (!activeServer) {
+      return { ok: false, message: "Server aktif tidak ditemukan." };
+    }
     const trxId =
       v.trx_id ||
       `MAN-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
 
     const { error } = await supabase.from("ppob_transactions").insert({
+      server_id: activeServer.id,
       trx_id: trxId,
       reseller_id: v.reseller_id || null,
       telegram_id: telegramId,

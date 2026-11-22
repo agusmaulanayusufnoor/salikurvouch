@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireStaff } from "@/lib/auth";
+import { getActiveServer } from "@/lib/server-context";
 import { createClient } from "@/lib/supabase/server";
 import {
   getBotTokenFromSettings,
@@ -69,7 +70,12 @@ export async function sendBroadcastAction(
     return { ok: false, message: "Pesan teks Telegram maksimal 4096 karakter." };
   }
 
-  const bot = await getBotTokenFromSettings();
+  const activeServer = await getActiveServer();
+  if (!activeServer) {
+    return { ok: false, message: "Server aktif tidak ditemukan." };
+  }
+
+  const bot = await getBotTokenFromSettings(activeServer.id);
   if (!bot) {
     return {
       ok: false,
@@ -82,6 +88,7 @@ export async function sendBroadcastAction(
   let targetQuery = supabase
     .from("resellers")
     .select("id, telegram_id, username")
+    .eq("server_id", activeServer.id)
     .eq("status", "active");
 
   if (targetType === "single") {
@@ -170,6 +177,7 @@ export async function sendBroadcastAction(
   }
 
   await supabase.from("broadcast_logs").insert({
+    server_id: activeServer.id,
     target_scope:
       targetType === "single"
         ? `single:${list[0]?.telegram_id ?? ""}`

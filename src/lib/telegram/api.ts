@@ -1,5 +1,5 @@
 import { decryptSecret, isEncryptedSecret } from "@/lib/crypto";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getActiveServer } from "@/lib/server-context";
 
 export interface TelegramInlineButton {
   text: string;
@@ -27,6 +27,10 @@ export interface TelegramWebhookInfo {
 }
 
 export interface BotSettingsRuntime {
+  serverId: string;
+  serverSlug: string;
+  serverName: string;
+  routerId: string | null;
   token: string;
   botUsername: string | null;
   botMode: "saldo_only" | "nonsaldo_only" | "hybrid";
@@ -50,38 +54,42 @@ export function escapeHtml(input: string): string {
     .replaceAll('"', "&quot;");
 }
 
-export async function getBotTokenFromSettings(): Promise<BotSettingsRuntime | null> {
-  const admin = createAdminClient();
-  const { data } = await admin
-    .from("app_settings")
-    .select("*")
-    .eq("id", 1)
-    .maybeSingle();
+export async function getBotTokenFromSettings(
+  serverId?: string
+): Promise<BotSettingsRuntime | null> {
+  let srv;
+  try {
+    srv = await getActiveServer(serverId);
+  } catch {
+    return null;
+  }
 
-  if (!data?.bot_token_encrypted) return null;
+  if (!srv.bot_token_encrypted) return null;
 
-  const token = isEncryptedSecret(data.bot_token_encrypted)
-    ? decryptSecret(data.bot_token_encrypted)
-    : data.bot_token_encrypted;
+  const token = isEncryptedSecret(srv.bot_token_encrypted)
+    ? decryptSecret(srv.bot_token_encrypted)
+    : srv.bot_token_encrypted;
 
   if (!token) return null;
 
   return {
+    serverId: srv.id,
+    serverSlug: srv.slug,
+    serverName: srv.name,
+    routerId: srv.router_id,
     token,
-    botUsername: data.bot_username,
-    botMode:
-      (data.bot_mode as "saldo_only" | "nonsaldo_only" | "hybrid") ||
-      "saldo_only",
-    webhookSecret: data.webhook_secret,
-    ownerTelegramId: data.owner_telegram_id,
-    ownerUsername: data.owner_username,
-    maxDepositAmount: Number(data.max_deposit_amount ?? 1000000),
-    lowBalanceThreshold: Number(data.low_balance_threshold ?? 10000),
-    ppobEnabled: data.ppob_enabled ?? true,
-    ppobMarkupSmallPct: Number(data.ppob_markup_small_pct ?? 3),
-    ppobMarkupLargePct: Number(data.ppob_markup_large_pct ?? 1),
-    ppobMarkupThreshold: Number(data.ppob_markup_threshold ?? 100000),
-    ppobProxyUrl: data.ppob_proxy_url ?? null,
+    botUsername: srv.bot_username,
+    botMode: srv.bot_mode,
+    webhookSecret: srv.webhook_secret,
+    ownerTelegramId: srv.owner_telegram_id,
+    ownerUsername: srv.owner_username,
+    maxDepositAmount: srv.max_deposit_amount,
+    lowBalanceThreshold: srv.low_balance_threshold,
+    ppobEnabled: srv.ppob_enabled,
+    ppobMarkupSmallPct: srv.ppob_markup_small_pct,
+    ppobMarkupLargePct: srv.ppob_markup_large_pct,
+    ppobMarkupThreshold: srv.ppob_markup_threshold,
+    ppobProxyUrl: srv.ppob_proxy_url,
   };
 }
 

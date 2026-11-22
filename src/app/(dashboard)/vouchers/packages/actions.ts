@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
+import { getActiveServer } from "@/lib/server-context";
 import { createClient } from "@/lib/supabase/server";
 
 export type PackageActionResult = {
@@ -90,9 +91,14 @@ export async function saveVoucherPackageAction(
     };
   }
 
+  const activeServer = await getActiveServer();
+  if (!activeServer) {
+    return { ok: false, message: "Server aktif tidak ditemukan." };
+  }
+
   const supabase = await createClient();
   const payload = {
-    router_id: v.router_id || null,
+    router_id: v.router_id || activeServer.router_id || null,
     mode: v.mode,
     name: v.name,
     menu_label: v.menu_label,
@@ -119,7 +125,10 @@ export async function saveVoucherPackageAction(
       .eq("id", v.id);
     if (error) return { ok: false, message: error.message };
   } else {
-    const { error } = await supabase.from("voucher_packages").insert(payload);
+    const { error } = await supabase.from("voucher_packages").insert({
+      ...payload,
+      server_id: activeServer.id,
+    });
     if (error) return { ok: false, message: error.message };
   }
 

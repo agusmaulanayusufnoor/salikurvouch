@@ -1,5 +1,6 @@
 import { Users, Wallet, Ticket, UserCheck } from "lucide-react";
 import { getAuthenticatedStaff } from "@/lib/auth";
+import { getActiveServer } from "@/lib/server-context";
 import { createClient } from "@/lib/supabase/server";
 import { formatIDR } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,9 +11,10 @@ export const metadata = {
 };
 
 export default async function ResellersPage() {
-  const [staff, supabase] = await Promise.all([
+  const [staff, supabase, activeServer] = await Promise.all([
     getAuthenticatedStaff(),
     createClient(),
+    getActiveServer(),
   ]);
 
   const { data } = await supabase
@@ -20,6 +22,7 @@ export default async function ResellersPage() {
     .select(
       "id, telegram_id, username, phone, balance, vouchers_sold, reseller_type, status, joined_at, updated_at"
     )
+    .eq("server_id", activeServer?.id ?? "")
     .order("balance", { ascending: false });
 
   const resellers = (data ?? []).map((r) => ({

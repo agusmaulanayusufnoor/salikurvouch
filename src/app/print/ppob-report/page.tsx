@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getAuthenticatedStaff } from "@/lib/auth";
+import { getActiveServer } from "@/lib/server-context";
 import { createClient } from "@/lib/supabase/server";
 import { formatDateTimeID, formatIDR } from "@/lib/utils";
 import { PpobPrintToolbar } from "./print-toolbar";
@@ -23,7 +24,10 @@ export default async function PrintPpobReportPage({
   const resellerId = sp.resellerId || "";
   const status = sp.status || "";
 
-  const supabase = await createClient();
+  const [supabase, activeServer] = await Promise.all([
+    createClient(),
+    getActiveServer(),
+  ]);
   let query = supabase
     .from("ppob_transactions")
     .select(
@@ -32,6 +36,7 @@ export default async function PrintPpobReportPage({
     .order("created_at", { ascending: false })
     .limit(1000);
 
+  if (activeServer) query = query.eq("server_id", activeServer.id);
   if (resellerId && resellerId !== "all") query = query.eq("reseller_id", resellerId);
   if (status && status !== "all") query = query.eq("status", status);
   if (from) query = query.gte("created_at", `${from}T00:00:00+07:00`);
@@ -72,7 +77,7 @@ export default async function PrintPpobReportPage({
               LAPORAN TRANSAKSI &amp; LABA PORTAL PULSA (PPOB)
             </h1>
             <p className="text-xs text-slate-600">
-              SalikurVouch • Periode: {from || "Awal"} s/d {to || "Sekarang"}
+              SalikurVouch ({activeServer?.name ?? "SalikurNet"}) • Periode: {from || "Awal"} s/d {to || "Sekarang"}
             </p>
           </div>
           <div className="text-right text-xs text-slate-600">

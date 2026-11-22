@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireStaff } from "@/lib/auth";
+import { getActiveServer } from "@/lib/server-context";
 import { createClient } from "@/lib/supabase/server";
 import { formatIDR } from "@/lib/utils";
 import { getDefaultMikroTikAdapter } from "@/lib/mikrotik/adapter";
@@ -78,12 +79,16 @@ export async function generateBatchVoucherAction(
   }
 
   const v = parsed.data;
+  const activeServer = await getActiveServer();
+  if (!activeServer) {
+    return { ok: false, message: "Server aktif tidak ditemukan." };
+  }
   const supabase = await createClient();
 
   const [resellerRes, pkgRes] = await Promise.all([
     supabase
       .from("resellers")
-      .select("id, telegram_id, username, balance, status")
+      .select("id, server_id, telegram_id, username, balance, status")
       .eq("id", v.reseller_id)
       .maybeSingle(),
     supabase
@@ -99,6 +104,7 @@ export async function generateBatchVoucherAction(
   if (!reseller) return { ok: false, message: "Reseller tidak ditemukan." };
   if (!pkg) return { ok: false, message: "Paket voucher tidak ditemukan." };
 
+  const serverId = activeServer.id;
   const unitPrice = Number(pkg.price);
   const unitMarkup = Number(pkg.markup);
   const unitNetCost = Math.max(unitPrice - unitMarkup, 0);
@@ -108,8 +114,9 @@ export async function generateBatchVoucherAction(
   let reservedTxId: number | null = null;
   if (v.deduct_balance && totalNetCost > 0) {
     const { data: rpcRes, error: rpcErr } = await supabase.rpc(
-      "rpc_reserve_balance",
+      "rpc_reserve_balance_v2",
       {
+        p_server_id: serverId,
         p_telegram_id: reseller.telegram_id,
         p_amount: totalNetCost,
         p_tx_type: "voucher_purchase",
@@ -210,6 +217,7 @@ export async function generateBatchVoucherAction(
   const { data: batchRow, error: batchErr } = await supabase
     .from("voucher_batches")
     .insert({
+      server_id: serverId,
       batch_code: batchCode,
       reseller_id: reseller.id,
       package_id: pkg.id,
@@ -235,6 +243,7 @@ export async function generateBatchVoucherAction(
   const quotaLabel = formatQuotaLabelMb(pkg.limit_total_mb);
   await supabase.from("vouchers").insert(
     createdOnRouter.map((item) => ({
+      server_id: serverId,
       batch_id: batchRow.id,
       reseller_id: reseller.id,
       package_id: pkg.id,
@@ -257,7 +266,7 @@ export async function generateBatchVoucherAction(
   // 4. Optional Telegram delivery
   let telegramStatusMsg = "";
   if (v.send_telegram) {
-    const bot = await getBotTokenFromSettings();
+    const bot = await getBotTokenFromSettings(serverId);
     if (!bot) {
       telegramStatusMsg = " (Bot Telegram belum diatur — pengiriman dilewati)";
     } else {
@@ -411,6 +420,10 @@ export async function generateCustomSingleVoucherAction(
   }
 
   const v = parsed.data;
+  const activeServer = await getActiveServer();
+  if (!activeServer) {
+    return { ok: false, message: "Server aktif tidak ditemukan." };
+  }
   const finalPassword = v.password || v.username;
   const loginType: "vc" | "up" = finalPassword === v.username ? "vc" : "up";
   const supabase = await createClient();
@@ -426,12 +439,12 @@ export async function generateCustomSingleVoucherAction(
   const batchCode = buildBatchCode();
   let apiId = "";
   let dnsName = "wifi.salikur.net";
-  let routerId: string | null = null;
+  let routerId: string | null = activeServer.router_id;
 
   try {
-    const adapter = await getDefaultMikroTikAdapter();
+    const adapter = await getDefaultMikroTikAdapter(activeServer.router_id ?? undefined);
     dnsName = adapter.config.dnsName;
-    routerId = adapter.config.id ?? null;
+    routerId = adapter.config.id ?? activeServer.router_id;
 
     apiId = await adapter.addHotspotUser({
       server: v.server,
@@ -457,7 +470,7 @@ export async function generateCustomSingleVoucherAction(
   let telegramError: string | null = null;
 
   if (v.send_telegram) {
-    const bot = await getBotTokenFromSettings();
+    const bot = await getBotTokenFromSettings(activeServer.id);
     if (bot) {
       const loginUrl = buildHotspotLoginUrl(dnsName, v.username, finalPassword);
       const qrBuf = await generateQrPngBuffer(loginUrl, v.card_color);
@@ -486,7 +499,7 @@ export async function generateCustomSingleVoucherAction(
         telegramError = res.description ?? "Gagal kirim Telegram";
         if (v.rollback_on_telegram_fail && apiId) {
           try {
-            const adapter = await getDefaultMikroTikAdapter();
+            const adapter = await getDefaultMikroTikAdapter(activeServer.router_id ?? undefined);
             await adapter.removeHotspotUser(apiId);
           } catch {
             // ignore
@@ -503,6 +516,7 @@ export async function generateCustomSingleVoucherAction(
   const { data: batchRow } = await supabase
     .from("voucher_batches")
     .insert({
+      server_id: activeServer.id,
       batch_code: batchCode,
       reseller_id: reseller.id,
       router_id: routerId,
@@ -520,6 +534,7 @@ export async function generateCustomSingleVoucherAction(
 
   if (batchRow) {
     await supabase.from("vouchers").insert({
+      server_id: activeServer.id,
       batch_id: batchRow.id,
       reseller_id: reseller.id,
       mikrotik_api_id: apiId || null,

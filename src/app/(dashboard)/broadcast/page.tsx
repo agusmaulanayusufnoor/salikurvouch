@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getActiveServer } from "@/lib/server-context";
 import { formatDateTimeID } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -23,16 +24,22 @@ export const metadata = {
 };
 
 export default async function BroadcastPage() {
-  const supabase = await createClient();
+  const [supabase, activeServer] = await Promise.all([
+    createClient(),
+    getActiveServer(),
+  ]);
+  const serverId = activeServer?.id ?? "";
   const [resellersRes, logsRes] = await Promise.all([
     supabase
       .from("resellers")
       .select("id, telegram_id, username")
+      .eq("server_id", serverId)
       .eq("status", "active")
       .order("username", { ascending: true }),
     supabase
       .from("broadcast_logs")
       .select("*")
+      .eq("server_id", serverId)
       .order("created_at", { ascending: false })
       .limit(20),
   ]);
