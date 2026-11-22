@@ -127,8 +127,37 @@ async function postPortalPulsaRaw(
     }
   }
 
-  // Tunnel HTTPS over HTTP CONNECT proxy
   const parsedProxy = new URL(proxyUrl);
+
+  // Mode A: HTTPS PHP/HTTP Endpoint Relay (e.g. https://salikur.net/ppob-relay.php?token=...)
+  // Works on both cPanel shared hosting and VPS with a whitelisted static IP!
+  const isHttpRelayEndpoint =
+    parsedProxy.pathname.endsWith(".php") ||
+    parsedProxy.pathname.includes("relay") ||
+    parsedProxy.searchParams.has("token");
+
+  if (isHttpRelayEndpoint) {
+    const relayToken = parsedProxy.searchParams.get("token") ?? "";
+    const relayRes = await fetch(proxyUrl, {
+      method: "POST",
+      headers: {
+        ...headers,
+        ...(relayToken ? { "X-Relay-Token": relayToken } : {}),
+      },
+      body,
+      signal: AbortSignal.timeout(25000),
+    });
+    const text = await relayRes.text();
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new Error(
+        `Invalid JSON dari Relay Portal Pulsa (HTTP ${relayRes.status}): ${text.slice(0, 200)}`
+      );
+    }
+  }
+
+  // Mode B: Standard HTTP CONNECT Proxy (e.g. http://user:pass@ip:8080)
   const proxyAuth =
     parsedProxy.username || parsedProxy.password
       ? `Basic ${Buffer.from(

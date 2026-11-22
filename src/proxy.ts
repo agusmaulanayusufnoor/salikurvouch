@@ -5,6 +5,7 @@ const PUBLIC_PATHS = [
   "/login",
   "/reset-password",
   "/api/telegram/webhook",
+  "/api/ppob/callback",
   "/api/download/apk",
   "/downloads",
 ];
