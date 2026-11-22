@@ -52,12 +52,12 @@ export default function ResetPasswordPage() {
               className="absolute inset-0 scale-125 rounded-full bg-cyan-400/25 blur-xl"
             />
             <Image
-              src="/logo.png"
+              src="/logo-round.png"
               alt="Logo SalikurVouch"
-              width={64}
-              height={64}
+              width={68}
+              height={68}
               priority
-              className="relative size-16 rounded-2xl ring-1 ring-white/30 shadow-[0_14px_36px_-8px_rgba(6,182,212,0.55)]"
+              className="relative size-[68px] rounded-full ring-2 ring-white/25 shadow-[0_14px_36px_-8px_rgba(6,182,212,0.6)]"
             />
             <span className="absolute -right-1.5 -bottom-1.5 flex size-7 items-center justify-center rounded-full border-2 border-[#081730] bg-sky-500 text-white shadow-lg">
               <KeyRound className="size-3.5" />

@@ -106,12 +106,12 @@ function LoginForm() {
               className="absolute inset-0 scale-125 rounded-full bg-cyan-400/25 blur-xl"
             />
             <Image
-              src="/logo.png"
+              src="/logo-round.png"
               alt="Logo SalikurVouch"
-              width={72}
-              height={72}
+              width={76}
+              height={76}
               priority
-              className="relative size-[72px] rounded-2xl ring-1 ring-white/30 shadow-[0_14px_36px_-8px_rgba(6,182,212,0.55)]"
+              className="relative size-[76px] rounded-full ring-2 ring-white/25 shadow-[0_14px_36px_-8px_rgba(6,182,212,0.6)]"
             />
             {isOtpStep ? (
               <span className="absolute -right-1.5 -bottom-1.5 flex size-7 items-center justify-center rounded-full border-2 border-[#081730] bg-emerald-500 text-white shadow-lg">
