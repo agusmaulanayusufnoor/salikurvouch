@@ -148,7 +148,7 @@ export function DashboardShell({
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
       <div className="flex h-16 items-center gap-3 px-5">
         <Image
-          src="/logo.png"
+          src="/logo-square.png"
           alt="Logo SalikurVouch"
           width={36}
           height={36}
