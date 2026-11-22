@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { RefreshCw, Search, Wallet, AlertTriangle } from "lucide-react";
+import { RefreshCw, Wallet, AlertTriangle } from "lucide-react";
 import {
   getPortalPulsaBalance,
   getPortalPulsaCatalog,
@@ -7,8 +7,6 @@ import {
 } from "@/lib/portalpulsa/client";
 import { formatIDR } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
@@ -16,14 +14,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { PpobCatalogClient } from "./catalog-client";
 
 export const metadata = {
   title: "Katalog Harga & Saldo Portal Pulsa",
@@ -47,7 +38,7 @@ export default async function PpobCatalogPage({
 
   const [balanceRes, catalogRes] = await Promise.all([
     getPortalPulsaBalance(),
-    getPortalPulsaCatalog(category, { keyword: q, bypassCache }),
+    getPortalPulsaCatalog(category, { bypassCache }),
   ]);
 
   return (
@@ -111,22 +102,10 @@ export default async function PpobCatalogPage({
               </Button>
             ))}
           </div>
-
-          <form className="flex gap-2">
-            <input type="hidden" name="category" value={category} />
-            <div className="relative">
-              <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-muted-foreground" />
-              <Input
-                name="q"
-                defaultValue={q}
-                placeholder="Cari kode / operator..."
-                className="w-56 pl-9"
-              />
-            </div>
-            <Button type="submit" variant="secondary" size="sm">
-              Cari
-            </Button>
-          </form>
+          <p className="text-xs text-muted-foreground">
+            Pilih Operator &amp; Jenis (misal: Indosat → Reguler) untuk
+            menemukan kode produk dengan cepat.
+          </p>
         </CardHeader>
         <CardContent>
           {!catalogRes.ok ? (
@@ -134,65 +113,10 @@ export default async function PpobCatalogPage({
               Gagal memuat katalog {category}: {catalogRes.error}
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Kode</TableHead>
-                  <TableHead>Operator</TableHead>
-                  <TableHead>Deskripsi Produk</TableHead>
-                  <TableHead className="text-right">Modal API</TableHead>
-                  <TableHead className="text-right">Harga Jual</TableHead>
-                  <TableHead className="text-right">Est. Laba</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {catalogRes.products.length === 0 ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={7}
-                      className="py-8 text-center text-muted-foreground"
-                    >
-                      Tidak ada produk ditemukan.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  catalogRes.products.slice(0, 200).map((p) => (
-                    <TableRow key={p.code}>
-                      <TableCell>
-                        <Badge variant="secondary" className="font-mono">
-                          {p.code}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-xs font-medium">
-                        {p.operator}
-                      </TableCell>
-                      <TableCell className="text-xs">{p.description}</TableCell>
-                      <TableCell className="text-right font-mono text-xs">
-                        {formatIDR(p.costPrice)}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-xs font-semibold">
-                        {formatIDR(p.sellPrice)}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-xs font-semibold text-emerald-600">
-                        +{formatIDR(p.profit)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            p.status.toLowerCase() === "normal"
-                              ? "success"
-                              : "warning"
-                          }
-                        >
-                          {p.status}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+            <PpobCatalogClient
+              products={catalogRes.products}
+              initialQuery={q}
+            />
           )}
         </CardContent>
       </Card>

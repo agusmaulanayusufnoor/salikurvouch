@@ -14,7 +14,28 @@ header('Content-Type: application/json; charset=utf-8');
 
 $RELAY_SECRET = 'GANTI_TOKEN_RAHASIA_MINIMAL_32_KARAKTER';
 
-$provided = $_SERVER['HTTP_X_RELAY_TOKEN'] ?? ($_GET['token'] ?? '');
+function get_req_header($name) {
+    $serverKey = 'HTTP_' . strtoupper(str_replace('-', '_', $name));
+    if (!empty($_SERVER[$serverKey])) {
+        return $_SERVER[$serverKey];
+    }
+    if (function_exists('getallheaders')) {
+        $all = getallheaders();
+        if (is_array($all)) {
+            foreach ($all as $k => $v) {
+                if (strcasecmp($k, $name) === 0) {
+                    return $v;
+                }
+            }
+        }
+    }
+    return '';
+}
+
+$provided = get_req_header('X-Relay-Token');
+if ($provided === '' && isset($_GET['token'])) {
+    $provided = (string) $_GET['token'];
+}
 if ($RELAY_SECRET === 'GANTI_TOKEN_RAHASIA_MINIMAL_32_KARAKTER' || !hash_equals($RELAY_SECRET, $provided)) {
     http_response_code(403);
     echo json_encode(['result' => 'failed', 'message' => 'Unauthorized relay token']);
@@ -27,9 +48,9 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-$userid = $_SERVER['HTTP_PORTAL_USERID'] ?? '';
-$key    = $_SERVER['HTTP_PORTAL_KEY'] ?? '';
-$secret = $_SERVER['HTTP_PORTAL_SECRET'] ?? '';
+$userid = get_req_header('portal-userid');
+$key    = get_req_header('portal-key');
+$secret = get_req_header('portal-secret');
 $body   = file_get_contents('php://input');
 
 $ch = curl_init('https://portalpulsa.com/api/connect/');
