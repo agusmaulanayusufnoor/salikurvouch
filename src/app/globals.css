@@ -100,3 +100,41 @@
     @apply bg-background text-foreground antialiased;
   }
 }
+
+@keyframes glass-orb-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(18px, -22px, 0) scale(1.06);
+  }
+}
+
+@keyframes glass-orb-float-reverse {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(-20px, 16px, 0) scale(0.95);
+  }
+}
+
+.animate-glass-orb {
+  animation: glass-orb-float 16s ease-in-out infinite;
+}
+
+.animate-glass-orb-reverse {
+  animation: glass-orb-float-reverse 20s ease-in-out infinite;
+}
+
+/* Keep browser autofill consistent inside dark frosted glass inputs */
+.glass-input:-webkit-autofill,
+.glass-input:-webkit-autofill:hover,
+.glass-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #f8fafc;
+  caret-color: #f8fafc;
+  -webkit-box-shadow: 0 0 0 1000px rgba(15, 29, 58, 0.85) inset;
+  transition: background-color 9999s ease-in-out 0s;
+}
