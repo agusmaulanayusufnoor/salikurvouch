@@ -4,12 +4,10 @@ import { formatIDR } from "@/lib/utils";
 import { getDefaultMikroTikAdapter } from "@/lib/mikrotik/adapter";
 import {
   buildBatchCode,
-  buildHotspotLoginUrl,
   buildVoucherComment,
   formatQuotaLabelMb,
   formatUptimeLabel,
   generateUniqueVouchers,
-  generateQrPngBuffer,
   mbToBytes,
 } from "@/lib/voucher-generator";
 import {
@@ -25,7 +23,6 @@ import {
   sendLongTelegramMessage,
   sendTelegramChatAction,
   sendTelegramMessage,
-  sendTelegramPhotoBuffer,
   sendTelegramPhotoByFileIdOrUrl,
   type BotSettingsRuntime,
   type TelegramInlineButton,
@@ -262,7 +259,6 @@ async function handleVoucherPurchaseCallback(params: {
 
   // 1. Atomic balance reservation (for saldo mode)
   let reservedTxId: number | null = null;
-  let balanceAfter = Number(reseller?.balance ?? 0);
 
   if (mode === "saldo") {
     const { data: rpcData, error: rpcErr } = await admin.rpc(
@@ -299,7 +295,6 @@ async function handleVoucherPurchaseCallback(params: {
 
     const row = Array.isArray(rpcData) ? rpcData[0] : rpcData;
     reservedTxId = Number(row?.transaction_id ?? 0) || null;
-    balanceAfter = Number(row?.balance_after ?? balanceAfter);
   }
 
   await answerTelegramCallback({
@@ -307,7 +302,7 @@ async function handleVoucherPurchaseCallback(params: {
     callbackQueryId,
     text: "Membuat voucher di MikroTik...",
   });
-  await sendTelegramChatAction({ token: bot.token, chatId, action: "upload_photo" });
+  await sendTelegramChatAction({ token: bot.token, chatId, action: "typing" });
 
   // 2. Create user on MikroTik (dual ROS v6/v7)
   let mikrotikApiId = "";
@@ -392,44 +387,28 @@ async function handleVoucherPurchaseCallback(params: {
     });
   }
 
-  // 4. Send QR Code photo & voucher details to Telegram
-  const loginUrl = buildHotspotLoginUrl(dnsName, cred.username, cred.password);
-  const qrBuffer = await generateQrPngBuffer(loginUrl, pkg.card_color);
-  const footerTpl = await getTemplate(admin, bot.serverId, "voucher_footer", {
-    dns_name: dnsName,
-    voucher_code: cred.username,
-    profile: pkg.mikrotik_profile,
-  });
-
-  const captionLines = [
-    `✅ <b>Voucher Hotspot Berhasil Dibuat</b>`,
-    `<code>========================</code>`,
-    `Paket    : <b>${escapeHtml(pkg.name)}</b>`,
+  // 4. Send clean text voucher reply to Telegram (without QR image)
+  const messageLines = [
+    `✅ Voucher WIFI`,
+    `========================`,
     pkg.login_type === "vc"
-      ? `Kode     : <code>${escapeHtml(cred.username)}</code>`
-      : `Username : <code>${escapeHtml(cred.username)}</code>\nPassword : <code>${escapeHtml(cred.password)}</code>`,
-    `Aktif    : ${escapeHtml(formatUptimeLabel(pkg.limit_uptime))}`,
-    `Kuota    : ${escapeHtml(formatQuotaLabelMb(pkg.limit_total_mb))}`,
-    `Harga    : ${formatIDR(price)}`,
-    mode === "saldo"
-      ? `Potong   : ${formatIDR(netCost)} (Markup ${formatIDR(markup)})`
-      : `Mode     : Non-Saldo (Admin)`,
-    mode === "saldo" ? `Sisa Saldo: <b>${formatIDR(balanceAfter)}</b>` : null,
-    `<code>========================</code>`,
-    footerTpl || `Login: ${escapeHtml(dnsName)}`,
-  ].filter(Boolean);
+      ? `Voucher   : <code>${escapeHtml(cred.username)}</code>`
+      : `Username  : <code>${escapeHtml(cred.username)}</code>\nPassword  : <code>${escapeHtml(cred.password)}</code>`,
+    `Aktif     : ${escapeHtml(formatUptimeLabel(pkg.limit_uptime))}`,
+    `========================`,
+  ];
 
-  const sent = await sendTelegramPhotoBuffer({
+  const sent = await sendTelegramMessage({
     token: bot.token,
     chatId,
-    buffer: qrBuffer,
-    filename: `voucher-${cred.username}.png`,
-    caption: captionLines.join("\n"),
+    text: messageLines.join("\n"),
     inlineKeyboard: [
-      [{ text: "🌐 Go to Login", url: loginUrl }],
       [
         { text: "💰 Cek Saldo", callback_data: "cek_saldo" },
-        { text: "🎫 Beli Lagi", callback_data: mode === "saldo" ? "menu:saldo" : "menu:nonsaldo" },
+        {
+          text: "🎫 Beli Lagi",
+          callback_data: mode === "saldo" ? "menu:saldo" : "menu:nonsaldo",
+        },
       ],
     ],
   });
@@ -445,13 +424,13 @@ async function handleVoucherPurchaseCallback(params: {
     if (reservedTxId) {
       await admin.rpc("rpc_refund_balance", {
         p_tx_id: reservedTxId,
-        p_reason: `Auto-rollback Telegram sendPhoto failed: ${sent.description ?? "unknown"}`,
+        p_reason: `Auto-rollback Telegram sendMessage failed: ${sent.description ?? "unknown"}`,
       });
     }
     if (batchRow) {
       await admin
         .from("voucher_batches")
-        .update({ telegram_error: sent.description ?? "sendPhoto failed" })
+        .update({ telegram_error: sent.description ?? "sendMessage failed" })
         .eq("id", batchRow.id);
     }
     return;
