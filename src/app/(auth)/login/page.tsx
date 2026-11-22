@@ -5,7 +5,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
-  ShieldCheck,
   Loader2,
   AlertCircle,
   KeyRound,
@@ -123,11 +122,12 @@ function LoginForm() {
           <h1 className="text-[26px] font-bold tracking-tight text-white">
             {isOtpStep ? "Verifikasi OTP" : "SalikurVouch"}
           </h1>
-          <p className="mt-1.5 text-sm leading-relaxed text-slate-300/85">
-            {isOtpStep
-              ? `Masukkan 6 digit kode OTP yang dikirim ke Telegram ${credState.maskedTarget ?? "Admin"}`
-              : "Panel Kontrol Voucher MikroTik, Reseller & PPOB"}
-          </p>
+          {isOtpStep ? (
+            <p className="mt-1.5 text-sm leading-relaxed text-slate-300/85">
+              Masukkan 6 digit kode OTP yang dikirim ke Telegram{" "}
+              {credState.maskedTarget ?? "Admin"}
+            </p>
+          ) : null}
         </div>
 
         {/* Form Area */}
@@ -234,11 +234,6 @@ function LoginForm() {
                   </>
                 )}
               </button>
-            </div>
-
-            <div className="flex items-center justify-center gap-1.5 pt-2 text-[11px] text-slate-300/75">
-              <ShieldCheck className="size-3.5 text-cyan-400" />
-              <span>Supabase Auth • OTP Telegram 2FA • Audit Log</span>
             </div>
           </form>
         ) : (
@@ -374,15 +369,12 @@ function LoginForm() {
             <p className="text-sm font-semibold text-white">
               SalikurVouch Android
             </p>
-            <p className="text-xs text-slate-300/80">
-              Aplikasi WebView ringan (.APK)
-            </p>
           </div>
         </div>
 
         <span className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-semibold text-cyan-200 transition-all group-hover:border-cyan-300/50 group-hover:bg-cyan-400/20 group-hover:text-white">
           <Download className="size-3.5" />
-          Download
+          Download APK
         </span>
       </a>
     </div>
