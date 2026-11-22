@@ -1,6 +1,18 @@
 import type { Metadata } from "next";
 import { Toaster } from "sonner";
+import { ThemeAutoScheduler } from "@/components/layout/theme-switcher";
 import "./globals.css";
+
+const THEME_INIT_SCRIPT = `
+(function() {
+  try {
+    var mode = localStorage.getItem('salikur-theme-mode') || 'auto';
+    var h = new Date().getHours();
+    var isDark = mode === 'dark' || (mode === 'auto' && (h >= 18 || h < 6));
+    document.documentElement.classList.toggle('dark', isDark);
+  } catch (e) {}
+})();
+`;
 
 export const metadata: Metadata = {
   title: {
@@ -25,7 +37,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="id" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body className="font-sans antialiased">
+        <ThemeAutoScheduler />
         {children}
         <Toaster richColors position="top-right" />
       </body>

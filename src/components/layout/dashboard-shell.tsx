@@ -35,6 +35,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { ThemeModeToggle } from "@/components/layout/theme-switcher";
 import { logoutAction } from "@/app/(auth)/login/actions";
 
 interface NavItem {
@@ -159,7 +160,7 @@ export function DashboardShell({
           <p className="truncate text-sm font-bold tracking-tight">
             SalikurVouch
           </p>
-          <p className="truncate text-xs text-sidebar-foreground/60">
+          <p className="truncate text-xs text-sidebar-foreground/75">
             MikroTik &amp; PPOB Suite
           </p>
         </div>
@@ -176,7 +177,7 @@ export function DashboardShell({
 
           return (
             <div key={group.title} className="space-y-1">
-              <p className="px-2.5 text-[11px] font-semibold tracking-wider text-sidebar-foreground/50 uppercase">
+              <p className="px-2.5 text-[11px] font-semibold tracking-wider text-sidebar-foreground/75 uppercase">
                 {group.title}
               </p>
               {visibleItems.map((item) => {
@@ -216,7 +217,7 @@ export function DashboardShell({
             <p className="truncate text-sm font-medium">
               {user.fullName || user.username}
             </p>
-            <p className="truncate text-xs text-sidebar-foreground/60">
+            <p className="truncate text-xs text-sidebar-foreground/75">
               {user.email}
             </p>
           </div>
@@ -290,6 +291,7 @@ export function DashboardShell({
           </div>
 
           <div className="flex items-center gap-2">
+            <ThemeModeToggle />
             <Badge variant="success">Supabase Connected</Badge>
           </div>
         </header>

@@ -41,55 +41,66 @@
 
 :root {
   --radius: 0.625rem;
-  --background: oklch(0.985 0.002 247.858);
-  --foreground: oklch(0.145 0.015 264.052);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0.015 264.052);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0.015 264.052);
-  --primary: oklch(0.511 0.177 254.604);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.962 0.008 247.896);
-  --secondary-foreground: oklch(0.208 0.025 265.755);
-  --muted: oklch(0.962 0.008 247.896);
-  --muted-foreground: oklch(0.52 0.02 257.417);
-  --accent: oklch(0.955 0.015 247.896);
-  --accent-foreground: oklch(0.208 0.025 265.755);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.908 0.01 255.508);
-  --input: oklch(0.908 0.01 255.508);
-  --ring: oklch(0.511 0.177 254.604);
-  --sidebar: oklch(0.165 0.022 260.031);
-  --sidebar-foreground: oklch(0.955 0.008 247.896);
-  --sidebar-primary: oklch(0.623 0.188 259.815);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.24 0.03 260.031);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.26 0.028 260.031);
-  --sidebar-ring: oklch(0.623 0.188 259.815);
+  /* Default Warm Coastal Palette: #FFEFD2, #6AB0AF, #F5A89A, #FFF2A5 */
+  --background: #fff6e5;
+  --foreground: #1b3131;
+  --card: #fffdf9;
+  --card-foreground: #1b3131;
+  --popover: #fffdf9;
+  --popover-foreground: #1b3131;
+  --primary: #3b8685;
+  --primary-foreground: #fffdf9;
+  --secondary: #ffefd2;
+  --secondary-foreground: #274444;
+  --muted: #f9ead0;
+  --muted-foreground: #506c6b;
+  --accent: #fff2a5;
+  --accent-foreground: #3a3110;
+  --destructive: #d46253;
+  --destructive-foreground: #fffdf9;
+  --border: #ead7b7;
+  --input: #e2cca6;
+  --ring: #6ab0af;
+  /* Coastal Teal Sidebar (#6AB0AF) with Warm Cream (#FFEFD2) active state */
+  --sidebar: #6ab0af;
+  --sidebar-foreground: #122c2c;
+  --sidebar-primary: #ffefd2;
+  --sidebar-primary-foreground: #143232;
+  --sidebar-accent: #7ec0bf;
+  --sidebar-accent-foreground: #102626;
+  --sidebar-border: #5a9e9d;
+  --sidebar-ring: #ffefd2;
 }
 
 .dark {
-  --background: oklch(0.129 0.02 264.695);
-  --foreground: oklch(0.984 0.003 247.858);
-  --card: oklch(0.17 0.024 264.695);
-  --card-foreground: oklch(0.984 0.003 247.858);
-  --popover: oklch(0.17 0.024 264.695);
-  --popover-foreground: oklch(0.984 0.003 247.858);
-  --primary: oklch(0.623 0.188 259.815);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.24 0.03 260.031);
-  --secondary-foreground: oklch(0.984 0.003 247.858);
-  --muted: oklch(0.24 0.03 260.031);
-  --muted-foreground: oklch(0.704 0.02 256.788);
-  --accent: oklch(0.24 0.03 260.031);
-  --accent-foreground: oklch(0.984 0.003 247.858);
-  --destructive: oklch(0.64 0.21 25.331);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.27 0.028 260.031);
-  --input: oklch(0.27 0.028 260.031);
-  --ring: oklch(0.623 0.188 259.815);
+  /* Auto Dark Mode after 18:00 (Monochrome Black & White / Dark Slate) */
+  --background: #0d1117;
+  --foreground: #f4f6f9;
+  --card: #151b23;
+  --card-foreground: #f4f6f9;
+  --popover: #151b23;
+  --popover-foreground: #f4f6f9;
+  --primary: #f4f6f9;
+  --primary-foreground: #0d1117;
+  --secondary: #212834;
+  --secondary-foreground: #eef2f6;
+  --muted: #1c232e;
+  --muted-foreground: #9aa4b2;
+  --accent: #252e3c;
+  --accent-foreground: #f4f6f9;
+  --destructive: #e5534b;
+  --destructive-foreground: #ffffff;
+  --border: #2a3342;
+  --input: #2a3342;
+  --ring: #9aa4b2;
+  --sidebar: #11151d;
+  --sidebar-foreground: #edf1f7;
+  --sidebar-primary: #f4f6f9;
+  --sidebar-primary-foreground: #0d1117;
+  --sidebar-accent: #1e2531;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #232b38;
+  --sidebar-ring: #9aa4b2;
 }
 
 @layer base {
@@ -97,7 +108,7 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply bg-background text-foreground antialiased transition-colors duration-300;
   }
 }
 
