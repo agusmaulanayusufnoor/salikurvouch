@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -46,8 +47,18 @@ export default function ResetPasswordPage() {
     <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/40 to-slate-100 p-4 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
       <Card className="w-full max-w-md shadow-lg border-border/80">
         <CardHeader className="space-y-3 text-center">
-          <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <KeyRound className="size-6" />
+          <div className="relative mx-auto flex items-center justify-center">
+            <Image
+              src="/logo.png"
+              alt="Logo SalikurVouch"
+              width={64}
+              height={64}
+              priority
+              className="size-16 rounded-2xl shadow-md"
+            />
+            <span className="absolute -right-1.5 -bottom-1.5 flex size-6 items-center justify-center rounded-full border-2 border-card bg-primary text-primary-foreground shadow-sm">
+              <KeyRound className="size-3.5" />
+            </span>
           </div>
           <div className="space-y-1">
             <CardTitle className="text-2xl font-bold">Reset Password</CardTitle>

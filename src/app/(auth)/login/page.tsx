@@ -1,11 +1,11 @@
 "use client";
 
 import { useActionState, useState, Suspense } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   ShieldCheck,
-  Wifi,
   Loader2,
   AlertCircle,
   KeyRound,
@@ -97,12 +97,20 @@ function LoginForm() {
     <div className="w-full max-w-md space-y-4">
       <Card className="w-full shadow-lg border-border/80">
         <CardHeader className="space-y-3 text-center">
-          <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+          <div className="relative mx-auto flex items-center justify-center">
+            <Image
+              src="/logo.png"
+              alt="Logo SalikurVouch"
+              width={68}
+              height={68}
+              priority
+              className="size-[68px] rounded-2xl shadow-md"
+            />
             {isOtpStep ? (
-              <KeyRound className="size-6" />
-            ) : (
-              <Wifi className="size-6" />
-            )}
+              <span className="absolute -right-1.5 -bottom-1.5 flex size-6 items-center justify-center rounded-full border-2 border-card bg-emerald-600 text-white shadow-sm">
+                <KeyRound className="size-3.5" />
+              </span>
+            ) : null}
           </div>
           <div className="space-y-1">
             <CardTitle className="text-2xl font-bold">

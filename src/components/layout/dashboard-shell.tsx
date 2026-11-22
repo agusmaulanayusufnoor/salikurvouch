@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -146,9 +147,14 @@ export function DashboardShell({
   const sidebarContent = (
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
       <div className="flex h-16 items-center gap-3 px-5">
-        <div className="flex size-9 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-          <Wifi className="size-5" />
-        </div>
+        <Image
+          src="/logo.png"
+          alt="Logo SalikurVouch"
+          width={36}
+          height={36}
+          priority
+          className="size-9 shrink-0 rounded-lg shadow-sm"
+        />
         <div className="min-w-0">
           <p className="truncate text-sm font-bold tracking-tight">
             SalikurVouch
