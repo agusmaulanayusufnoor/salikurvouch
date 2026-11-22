@@ -34,6 +34,7 @@ import {
   Server,
   Plus,
   Loader2,
+  Database,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ServerSummary } from "@/lib/server-context";
@@ -133,6 +134,12 @@ const NAV_GROUPS: NavGroup[] = [
         label: "Webhook Telegram",
         href: "/settings/webhook",
         icon: Webhook,
+        adminOnly: true,
+      },
+      {
+        label: "Database & Backup",
+        href: "/settings/database",
+        icon: Database,
         adminOnly: true,
       },
     ],

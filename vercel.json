@@ -10,6 +10,15 @@
     },
     "src/app/api/exports/**/*.ts": {
       "maxDuration": 60
+    },
+    "src/app/api/admin/database/**/*.ts": {
+      "maxDuration": 60
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/health/keep-alive",
+      "schedule": "0 2 * * *"
+    }
+  ]
 }

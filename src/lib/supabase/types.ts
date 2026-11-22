@@ -86,6 +86,9 @@ export type Database = {
           bot_token_encrypted: string | null
           bot_username: string | null
           id: number
+          last_backup_at: string | null
+          last_cutoff_at: string | null
+          last_keepalive_at: string | null
           low_balance_threshold: number
           max_deposit_amount: number
           owner_telegram_id: number | null
@@ -103,6 +106,9 @@ export type Database = {
           bot_token_encrypted?: string | null
           bot_username?: string | null
           id?: number
+          last_backup_at?: string | null
+          last_cutoff_at?: string | null
+          last_keepalive_at?: string | null
           low_balance_threshold?: number
           max_deposit_amount?: number
           owner_telegram_id?: number | null
@@ -120,6 +126,9 @@ export type Database = {
           bot_token_encrypted?: string | null
           bot_username?: string | null
           id?: number
+          last_backup_at?: string | null
+          last_cutoff_at?: string | null
+          last_keepalive_at?: string | null
           low_balance_threshold?: number
           max_deposit_amount?: number
           owner_telegram_id?: number | null
@@ -1128,6 +1137,7 @@ export type Database = {
           transaction_id: number
         }[]
       }
+      rpc_get_database_storage_stats: { Args: never; Returns: Json }
       rpc_next_ppob_counter: {
         Args: {
           p_product_code: string
@@ -1147,6 +1157,7 @@ export type Database = {
         }
         Returns: number
       }
+      rpc_preview_cutoff_data: { Args: { p_months: number }; Returns: Json }
       rpc_refund_balance: {
         Args: { p_reason?: string; p_tx_id: number }
         Returns: {

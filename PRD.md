@@ -268,6 +268,11 @@ Bot berjalan melalui **satu endpoint webhook terpadu** dengan konfigurasi mode o
   - **Pengaturan Portal Pulsa (PPOB)**: Konfigurasi aturan markup, toggle aktif/nonaktif PPOB, dan konfigurasi opsional **Outbound Proxy URL** (untuk static IP whitelist di Vercel).
 - **FR-11.2**: **Text & Message Templates** (`/settings/templates`): Mengimplementasikan halaman `settingstext.php` yang sebelumnya belum selesai — admin dapat mengkustomisasi teks welcome (terdaftar & belum terdaftar), teks informasi promo/saldo rendah, footer voucher, dan pesan deposit dengan variabel placeholder (`{{username}}`, `{{saldo}}`, `{{voucher_code}}`, dll.).
 - **FR-11.3**: **Webhook Manager** (`/settings/webhook`): Menampilkan URL webhook Next.js otomatis (`https://<domain>/api/telegram/webhook`), tombol **Set Webhook** (otomatis mendaftarkan `secret_token`), **Unset Webhook**, dan status live dari `getWebhookInfo` (status aktif, URL aktif, `pending_update_count`, `last_error_message`).
+- **FR-11.4**: **Database, Storage Free-Tier, Keep-Alive, Backup/Restore & Data Cutoff** (`/settings/database`):
+  - **Status Storage Supabase Free Tier**: Memantau pemakaian PostgreSQL Database (kuota 500 MB) beserta rincian ukuran & estimasi baris tiap tabel, serta pemakaian Supabase Storage (kuota 1 GB) per bucket (`broadcast-media`, `deposit-proofs`).
+  - **Proteksi Auto-Pause Supabase (7 Hari)**: Endpoint `/api/health/keep-alive` (diamankan dengan `CRON_SECRET`) yang dipanggil otomatis setiap 3 hari oleh GitHub Actions (`.github/workflows/supabase-keepalive.yml`) dan Vercel Cron (`vercel.json`), lengkap dengan indikator timestamp ping terakhir dan tombol test ping manual di UI.
+  - **Backup & Restore Database**: Download snapshot terkompresi (`.json.gz`) lengkap dengan checksum SHA-256 (kredensial tetap terenkripsi AES-256-GCM), serta Restore dari file `.json` / `.json.gz` dengan preview isi, validasi checksum, dan pilihan mode **Merge/Upsert** atau **Replace** (wajib konfirmasi eksplisit).
+  - **Hapus Data Cutoff (Retensi Data)**: Memangkas data historis lama dengan pilihan **Sisakan 1 Tahun Terakhir (12 Bulan)** atau **Sisakan 6 Bulan Terakhir (6 Bulan)** untuk menghemat kuota Free Tier 500 MB — didahului **Simulasi Dry-Run** jumlah baris per tabel dan konfirmasi eksplisit tanpa menghapus master data (`resellers`, saldo berjalan, `routers`, `voucher_packages`, `app_settings`).
 
 ---
 
@@ -635,11 +640,14 @@ Lokasi repositori proyek baru: `/Users/agusmac/Nextjs/salikurvouch` (folder `/Us
 │   │   │   └── settings/
 │   │   │       ├── page.tsx                  # RouterOS (v6/v7), Bot, Owner, PPOB Markup & Proxy, Test Conn
 │   │   │       ├── templates/page.tsx        # Custom Teks Bot Telegram
-│   │   │       └── webhook/page.tsx          # Set/Unset/Info Webhook Telegram
+│   │   │       ├── webhook/page.tsx          # Set/Unset/Info Webhook Telegram
+│   │   │       └── database/page.tsx         # Storage Free Tier, Keep-Alive, Backup/Restore & Cutoff 6/12 Bln
 │   │   ├── print/
 │   │   │   ├── vouchers/[batchCode]/page.tsx # Print Layout 4-Kolom A4 Kartu Voucher
 │   │   │   └── ppob-report/page.tsx          # Print Layout A4 Landscape Laporan Pulsa
 │   │   └── api/
+│   │       ├── health/keep-alive/route.ts    # Cron Keep-Alive Anti Auto-Pause Supabase (7 Hari)
+│   │       ├── admin/database/               # API Storage Stats, Backup (.json.gz), Restore & Cutoff 6/12 Bln
 │   │       ├── telegram/webhook/route.ts     # Endpoint Webhook Telegram Bot (Node.js runtime)
 │   │       ├── mikrotik/
 │   │       │   ├── status/route.ts           # Live CPU/RAM/Uptime/Active

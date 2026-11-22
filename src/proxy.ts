@@ -8,6 +8,7 @@ const PUBLIC_PATHS = [
   "/api/ppob/callback",
   "/api/download/apk",
   "/downloads",
+  "/api/health/keep-alive",
 ];
 
 function isPublicPath(pathname: string): boolean {

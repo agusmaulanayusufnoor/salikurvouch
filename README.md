@@ -54,11 +54,14 @@ Tambahkan variabel berikut di **Vercel Project Settings → Environment Variable
 - `APP_ENCRYPTION_KEY` *(wajib sama dengan kunci yang dipakai saat migrasi SQLite agar password router & bot token dapat didekripsi)*
 - `PORTALPULSA_USERID`, `PORTALPULSA_KEY`, `PORTALPULSA_SECRET`
 - `PORTALPULSA_PROXY_URL` *(opsional — isi jika memakai static-IP HTTP CONNECT proxy untuk IP Whitelist PortalPulsa.com)*
+- `CRON_SECRET` *(kunci rahasia untuk mengamankan endpoint keep-alive `/api/health/keep-alive`)*
 
-### 2. GitHub Repository Secrets (CI/CD `.github/workflows/ci-cd.yml`)
+### 2. GitHub Repository Secrets (CI/CD & Keep-Alive Anti Auto-Pause)
 Tambahkan secrets di **GitHub → Settings → Secrets and variables → Actions**:
-- `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`
-- `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `APP_ENCRYPTION_KEY`
+- `APP_URL` *(contoh: `https://app.salikur.net` — dipakai workflow `.github/workflows/supabase-keepalive.yml` setiap 3 hari)*
+- `CRON_SECRET` *(wajib sama dengan `CRON_SECRET` di Vercel)*
+- `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` *(opsional jika deploy via GitHub Actions CLI)*
+- `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `APP_ENCRYPTION_KEY`
 
 ### 3. Checklist Cutover Produksi
 1. Pastikan **Allow new users to sign up** dinonaktifkan di Supabase Auth → Providers → Email, dan aktifkan **Leaked Password Protection** di Auth → Password Security.
