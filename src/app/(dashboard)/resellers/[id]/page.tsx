@@ -280,7 +280,12 @@ export default async function ResellerDetailPage({
                     <TableCell>
                       <Badge
                         variant={
-                          tx.status === "success" ? "success" : "destructive"
+                          tx.status === "success"
+                            ? "success"
+                            : tx.status === "failed" ||
+                                tx.status === "refunded"
+                              ? "destructive"
+                              : "secondary"
                         }
                       >
                         {tx.status}

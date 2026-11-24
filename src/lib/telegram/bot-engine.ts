@@ -436,11 +436,25 @@ async function handleVoucherPurchaseCallback(params: {
     return;
   }
 
+  const finalizeTasks: PromiseLike<unknown>[] = [];
   if (batchRow) {
-    await admin
-      .from("voucher_batches")
-      .update({ telegram_sent: true })
-      .eq("id", batchRow.id);
+    finalizeTasks.push(
+      admin
+        .from("voucher_batches")
+        .update({ telegram_sent: true })
+        .eq("id", batchRow.id)
+    );
+  }
+  if (reservedTxId) {
+    finalizeTasks.push(
+      admin
+        .from("wallet_transactions")
+        .update({ status: "success" })
+        .eq("id", reservedTxId)
+    );
+  }
+  if (finalizeTasks.length > 0) {
+    await Promise.all(finalizeTasks);
   }
 }
 
@@ -962,22 +976,30 @@ async function handleCallbackQuery(
       return;
     }
 
-    await admin.from("ppob_transactions").insert({
-      server_id: bot.serverId,
-      trx_id: trxId,
-      reseller_id: resellerId,
-      telegram_id: telegramId,
-      product_code: product.code,
-      target_number: phone,
-      cost_price: costPrice,
-      sell_price: finalSell,
-      profit,
-      status: order.status,
-      serial_number: order.serialNumber,
-      description: `${product.description} (${order.message})`,
-      source: "telegram_bot",
-      raw_response: (order.raw ?? null) as never,
-    });
+    await Promise.all([
+      admin.from("ppob_transactions").insert({
+        server_id: bot.serverId,
+        trx_id: trxId,
+        reseller_id: resellerId,
+        telegram_id: telegramId,
+        product_code: product.code,
+        target_number: phone,
+        cost_price: costPrice,
+        sell_price: finalSell,
+        profit,
+        status: order.status,
+        serial_number: order.serialNumber,
+        description: `${product.description} (${order.message})`,
+        source: "telegram_bot",
+        raw_response: (order.raw ?? null) as never,
+      }),
+      txId
+        ? admin
+            .from("wallet_transactions")
+            .update({ status: "success" })
+            .eq("id", txId)
+        : Promise.resolve(),
+    ]);
 
     await sendTelegramMessage({
       token: bot.token,

@@ -68,7 +68,7 @@ export default async function DashboardPage() {
     supabase
       .from("wallet_transactions")
       .select(
-        "id, seller_name, tx_type, amount, voucher_price, balance_after, status, created_at"
+        "id, seller_name, tx_type, voucher_username, voucher_profile, notes, amount, voucher_price, balance_after, status, created_at"
       )
       .eq("server_id", serverId)
       .order("created_at", { ascending: false })
@@ -311,45 +311,79 @@ export default async function DashboardPage() {
                   <tr className="border-b text-left text-xs text-muted-foreground uppercase">
                     <th className="py-2.5 pr-4">Waktu</th>
                     <th className="py-2.5 pr-4">Reseller</th>
-                    <th className="py-2.5 pr-4">Tipe</th>
+                    <th className="py-2.5 pr-4">Kode Voucher</th>
                     <th className="py-2.5 pr-4 text-right">Mutasi</th>
                     <th className="py-2.5 pr-4 text-right">Saldo Akhir</th>
                     <th className="py-2.5">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {recentTx.map((tx) => (
-                    <tr key={tx.id} className="hover:bg-muted/40">
-                      <td className="py-2.5 pr-4 whitespace-nowrap text-muted-foreground">
-                        {formatDateTimeID(tx.created_at)}
-                      </td>
-                      <td className="py-2.5 pr-4 font-medium">
-                        {tx.seller_name || "-"}
-                      </td>
-                      <td className="py-2.5 pr-4">
-                        <Badge variant="outline">{tx.tx_type}</Badge>
-                      </td>
-                      <td className="py-2.5 pr-4 text-right font-mono">
-                        {formatIDR(Number(tx.amount))}
-                      </td>
-                      <td className="py-2.5 pr-4 text-right font-mono">
-                        {formatIDR(Number(tx.balance_after))}
-                      </td>
-                      <td className="py-2.5">
-                        <Badge
-                          variant={
-                            tx.status === "success"
-                              ? "success"
-                              : tx.status === "failed"
-                                ? "destructive"
-                                : "secondary"
-                          }
-                        >
-                          {tx.status}
-                        </Badge>
-                      </td>
-                    </tr>
-                  ))}
+                  {recentTx.map((tx) => {
+                    const fallbackLabel =
+                      tx.tx_type === "topup"
+                        ? "Top Up Saldo"
+                        : tx.tx_type === "topdown"
+                          ? "Top Down Saldo"
+                          : tx.tx_type === "refund"
+                            ? "Refund"
+                            : tx.tx_type === "ppob_purchase"
+                              ? tx.notes || "PPOB"
+                              : tx.notes || tx.tx_type;
+                    return (
+                      <tr key={tx.id} className="hover:bg-muted/40">
+                        <td className="py-2.5 pr-4 whitespace-nowrap text-muted-foreground">
+                          {formatDateTimeID(tx.created_at)}
+                        </td>
+                        <td className="py-2.5 pr-4 font-medium">
+                          {tx.seller_name || "-"}
+                        </td>
+                        <td className="py-2.5 pr-4">
+                          {tx.voucher_username ? (
+                            <div className="flex items-center gap-1.5">
+                              <Badge
+                                variant="outline"
+                                className="font-mono text-xs"
+                              >
+                                {tx.voucher_username}
+                              </Badge>
+                              {tx.voucher_profile ? (
+                                <span className="text-xs text-muted-foreground">
+                                  ({tx.voucher_profile})
+                                </span>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <span
+                              className="inline-block max-w-[220px] truncate text-xs text-muted-foreground"
+                              title={fallbackLabel}
+                            >
+                              {fallbackLabel}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2.5 pr-4 text-right font-mono">
+                          {formatIDR(Number(tx.amount))}
+                        </td>
+                        <td className="py-2.5 pr-4 text-right font-mono">
+                          {formatIDR(Number(tx.balance_after))}
+                        </td>
+                        <td className="py-2.5">
+                          <Badge
+                            variant={
+                              tx.status === "success"
+                                ? "success"
+                                : tx.status === "failed" ||
+                                    tx.status === "refunded"
+                                  ? "destructive"
+                                  : "secondary"
+                            }
+                          >
+                            {tx.status}
+                          </Badge>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

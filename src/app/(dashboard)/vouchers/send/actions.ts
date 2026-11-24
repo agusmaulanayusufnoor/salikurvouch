@@ -243,27 +243,49 @@ export async function generateBatchVoucherAction(
   }
 
   const quotaLabel = formatQuotaLabelMb(pkg.limit_total_mb);
-  await supabase.from("vouchers").insert(
-    createdOnRouter.map((item) => ({
-      server_id: serverId,
-      batch_id: batchRow.id,
-      reseller_id: reseller.id,
-      package_id: pkg.id,
-      mikrotik_api_id: item.apiId || null,
-      username: item.username,
-      password: item.password,
-      login_type: pkg.login_type,
-      profile: pkg.mikrotik_profile,
-      time_limit: pkg.limit_uptime,
-      data_limit_label: quotaLabel,
-      price: unitPrice,
-      markup: unitMarkup,
-      net_cost: unitNetCost,
-      dns_name: dnsName,
-      card_color: pkg.card_color,
-      status: "success",
-    }))
-  );
+  const voucherCodeLabel =
+    createdOnRouter.length === 1
+      ? createdOnRouter[0].username
+      : createdOnRouter.length > 1
+        ? `${createdOnRouter[0].username} (+${createdOnRouter.length - 1})`
+        : null;
+
+  await Promise.all([
+    supabase.from("vouchers").insert(
+      createdOnRouter.map((item) => ({
+        server_id: serverId,
+        batch_id: batchRow.id,
+        reseller_id: reseller.id,
+        package_id: pkg.id,
+        mikrotik_api_id: item.apiId || null,
+        username: item.username,
+        password: item.password,
+        login_type: pkg.login_type,
+        profile: pkg.mikrotik_profile,
+        time_limit: pkg.limit_uptime,
+        data_limit_label: quotaLabel,
+        price: unitPrice,
+        markup: unitMarkup,
+        net_cost: unitNetCost,
+        dns_name: dnsName,
+        card_color: pkg.card_color,
+        status: "success",
+      }))
+    ),
+    reservedTxId
+      ? supabase
+          .from("wallet_transactions")
+          .update({
+            status: "success",
+            voucher_username: voucherCodeLabel,
+            voucher_password:
+              createdOnRouter.length === 1
+                ? createdOnRouter[0].password
+                : null,
+          })
+          .eq("id", reservedTxId)
+      : Promise.resolve(),
+  ]);
 
   // 4. Optional Telegram delivery
   let telegramStatusMsg = "";
