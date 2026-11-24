@@ -33,6 +33,7 @@ const initialOtpState: AuthActionState = {};
 function LoginForm() {
   const searchParams = useSearchParams();
   const nextPath = searchParams.get("next") ?? "";
+  const apkBuilding = searchParams.get("apk") === "building";
 
   const [credState, credFormAction, isCredPending] = useActionState(
     loginAction,
@@ -356,6 +357,16 @@ function LoginForm() {
       </section>
 
       {/* Frosted Glass Android APK Download Dock */}
+      {apkBuilding ? (
+        <div className="flex items-start gap-2 rounded-xl border border-amber-400/35 bg-amber-500/15 px-3.5 py-2.5 text-xs leading-relaxed text-amber-100 backdrop-blur-md">
+          <AlertCircle className="mt-0.5 size-4 shrink-0 text-amber-300" />
+          <span>
+            File APK Android sedang dalam proses build &amp; rilis. Silakan
+            coba unduh kembali beberapa menit lagi.
+          </span>
+        </div>
+      ) : null}
+
       <a
         href="/api/download/apk"
         download="SalikurVouch.apk"
