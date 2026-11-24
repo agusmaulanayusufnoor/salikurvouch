@@ -55,7 +55,21 @@ export function generateUniqueVouchers(params: {
   return results;
 }
 
-export function buildBatchCode(now = new Date()): string {
+export function sanitizeBatchPrefix(customComment?: string | null): string {
+  const cleaned = (customComment ?? "")
+    .trim()
+    .replace(/\s+/g, "_")
+    .replace(/[^A-Za-z0-9_-]/g, "")
+    .replace(/_+/g, "_")
+    .replace(/^[_-]+|[_-]+$/g, "")
+    .slice(0, 32);
+  return cleaned || "BATCH";
+}
+
+export function buildBatchCode(
+  now = new Date(),
+  customComment?: string | null
+): string {
   const pad = (n: number, w = 2) => String(n).padStart(w, "0");
   // WIB (+07:00)
   const wib = new Date(now.getTime() + 7 * 60 * 60 * 1000);
@@ -66,7 +80,8 @@ export function buildBatchCode(now = new Date()): string {
   const mm = pad(wib.getUTCMinutes());
   const ss = pad(wib.getUTCSeconds());
   const rand = pad(crypto.randomInt(100, 1000), 3);
-  return `BATCH_${y}${m}${d}_${hh}${mm}${ss}_${rand}`;
+  const prefix = sanitizeBatchPrefix(customComment);
+  return `${prefix}_${y}${m}${d}_${hh}${mm}${ss}_${rand}`;
 }
 
 export function buildVoucherComment(params: {

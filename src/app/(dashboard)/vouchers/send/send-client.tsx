@@ -71,6 +71,7 @@ export function SendVoucherClient({
   const [packageId, setPackageId] = useState(packages[0]?.id ?? "");
   const [quantity, setQuantity] = useState("10");
   const [prefix, setPrefix] = useState("");
+  const [customComment, setCustomComment] = useState("");
   const [deductBalance, setDeductBalance] = useState(false); // Locked Decision #5: default OFF
   const [sendTelegram, setSendTelegram] = useState(true);
 
@@ -103,6 +104,7 @@ export function SendVoucherClient({
     fd.set("package_id", packageId);
     fd.set("quantity", String(qtyNum));
     fd.set("prefix", prefix);
+    fd.set("custom_comment", customComment);
     fd.set("deduct_balance", String(deductBalance));
     fd.set("send_telegram", String(sendTelegram));
 
@@ -190,7 +192,7 @@ export function SendVoucherClient({
                   </div>
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-3">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   <div className="space-y-2">
                     <Label htmlFor="b-qty">Jumlah Voucher (1–100)</Label>
                     <Input
@@ -212,6 +214,31 @@ export function SendVoucherClient({
                       placeholder="misal: v5-"
                       maxLength={6}
                     />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="b-custom-comment">
+                      Custom Comment (Opsional)
+                    </Label>
+                    <Input
+                      id="b-custom-comment"
+                      value={customComment}
+                      onChange={(e) => setCustomComment(e.target.value)}
+                      placeholder="Default: BATCH"
+                      maxLength={32}
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      Mengganti kata{" "}
+                      <code className="font-mono">BATCH</code> →{" "}
+                      <code className="font-mono">
+                        {(customComment
+                          .trim()
+                          .replace(/\s+/g, "_")
+                          .replace(/[^A-Za-z0-9_-]/g, "")
+                          .replace(/_+/g, "_")
+                          .replace(/^[_-]+|[_-]+$/g, "") || "BATCH")}
+                        _YYYYMMDD_...
+                      </code>
+                    </p>
                   </div>
                   <div className="rounded-lg border bg-muted/40 p-3">
                     <p className="text-xs text-muted-foreground">
@@ -381,6 +408,24 @@ export function SendVoucherClient({
                       defaultValue={5000}
                     />
                   </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="s-custom-comment">
+                    Custom Comment (Opsional)
+                  </Label>
+                  <Input
+                    id="s-custom-comment"
+                    name="custom_comment"
+                    placeholder="Kosongkan untuk default: BATCH"
+                    maxLength={32}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Jika diisi, menggantikan kata{" "}
+                    <code className="font-mono">BATCH</code> pada comment
+                    MikroTik dan kode batch (misal:{" "}
+                    <code className="font-mono">PROMO_20261124_...</code>).
+                  </p>
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-2">

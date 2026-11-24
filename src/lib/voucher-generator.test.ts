@@ -48,13 +48,19 @@ describe("voucher-generator", () => {
     const batch = buildBatchCode(fixedDate);
     expect(batch).toMatch(/^BATCH_20261121_203005_\d{3}$/);
 
+    const fallbackBatch = buildBatchCode(fixedDate, "   ");
+    expect(fallbackBatch).toMatch(/^BATCH_20261121_203005_\d{3}$/);
+
+    const customBatch = buildBatchCode(fixedDate, "Warung Budi | #1");
+    expect(customBatch).toMatch(/^Warung_Budi_1_20261121_203005_\d{3}$/);
+
     const comment = buildVoucherComment({
       seller: "agusmyn",
       price: 15000,
-      batchCode: batch,
+      batchCode: customBatch,
       now: fixedDate,
     });
-    expect(comment).toBe(`vc-bot|agusmyn|15000|21-11-2026|${batch}`);
+    expect(comment).toBe(`vc-bot|agusmyn|15000|21-11-2026|${customBatch}`);
 
     expect(buildHotspotLoginUrl("wifi.salikur.net", "abc", "123")).toBe(
       "http://wifi.salikur.net/login?username=abc&password=123"

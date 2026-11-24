@@ -50,6 +50,7 @@ const batchSchema = z.object({
   deduct_balance: z.boolean().default(false),
   send_telegram: z.boolean().default(true),
   prefix: z.string().trim().max(6).optional(),
+  custom_comment: z.string().trim().max(32).optional(),
 });
 
 export async function generateBatchVoucherAction(
@@ -69,6 +70,7 @@ export async function generateBatchVoucherAction(
     deduct_balance: formData.get("deduct_balance") === "true",
     send_telegram: formData.get("send_telegram") !== "false",
     prefix: formData.get("prefix") || "",
+    custom_comment: formData.get("custom_comment") || "",
   });
 
   if (!parsed.success) {
@@ -142,7 +144,7 @@ export async function generateBatchVoucherAction(
   }
 
   // 2. Generate credentials & create users on MikroTik
-  const batchCode = buildBatchCode();
+  const batchCode = buildBatchCode(new Date(), v.custom_comment);
   const credentials = generateUniqueVouchers({
     quantity: v.quantity,
     length: pkg.code_length,
@@ -383,6 +385,7 @@ const customSingleSchema = z.object({
   limit_total_mb: z.coerce.number().int().min(0).default(0),
   price: z.coerce.number().min(0).default(0),
   card_color: z.string().trim().default("#20a8d8"),
+  custom_comment: z.string().trim().max(32).optional(),
   send_telegram: z.boolean().default(true),
   rollback_on_telegram_fail: z.boolean().default(true),
 });
@@ -407,6 +410,7 @@ export async function generateCustomSingleVoucherAction(
     limit_total_mb: formData.get("limit_total_mb") || 0,
     price: formData.get("price") || 0,
     card_color: formData.get("card_color") || "#20a8d8",
+    custom_comment: formData.get("custom_comment") || "",
     send_telegram: formData.get("send_telegram") !== "false",
     rollback_on_telegram_fail:
       formData.get("rollback_on_telegram_fail") !== "false",
@@ -436,7 +440,7 @@ export async function generateCustomSingleVoucherAction(
 
   if (!reseller) return { ok: false, message: "Reseller tidak ditemukan." };
 
-  const batchCode = buildBatchCode();
+  const batchCode = buildBatchCode(new Date(), v.custom_comment);
   let apiId = "";
   let dnsName = "wifi.salikur.net";
   let routerId: string | null = activeServer.router_id;
