@@ -155,25 +155,25 @@ export function VoucherA4PrintSheet({
 
                         {card.loginType === "vc" ||
                         card.username === card.password ? (
-                          <div className="rounded border border-dashed border-slate-400 bg-slate-50 px-1 py-[2px] text-center">
-                            <p className="text-[6.5px] uppercase tracking-wider text-slate-500">
+                          <div className="rounded border border-dashed border-slate-400 bg-slate-50 px-1 py-[3px] text-center">
+                            <p className="text-[6.5px] leading-none uppercase tracking-wider text-slate-500">
                               Kode Voucher
                             </p>
-                            <p className="truncate font-mono text-[12px] font-extrabold tracking-wide text-slate-900">
+                            <p className="mt-[2px] truncate font-mono text-[16px] leading-[1.15] font-extrabold tracking-wider text-slate-900">
                               {card.username}
                             </p>
                           </div>
                         ) : (
-                          <div className="rounded border border-dashed border-slate-400 bg-slate-50 px-1 py-[2px] font-mono text-[8.5px]">
+                          <div className="rounded border border-dashed border-slate-400 bg-slate-50 px-1.5 py-[2px] font-mono text-[10px] leading-[1.2]">
                             <p className="truncate">
                               <span className="text-slate-500">U:</span>{" "}
-                              <strong className="text-slate-900">
+                              <strong className="font-extrabold text-slate-900">
                                 {card.username}
                               </strong>
                             </p>
                             <p className="truncate">
                               <span className="text-slate-500">P:</span>{" "}
-                              <strong className="text-slate-900">
+                              <strong className="font-extrabold text-slate-900">
                                 {card.password}
                               </strong>
                             </p>
