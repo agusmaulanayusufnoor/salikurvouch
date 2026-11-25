@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 import {
   Search,
@@ -16,8 +17,13 @@ import {
   X,
   RotateCcw,
   Send,
+  Printer,
 } from "lucide-react";
 import type { HotspotUser } from "@/lib/mikrotik/types";
+import {
+  filterHotspotUsers,
+  isUnusedVoucher,
+} from "@/lib/mikrotik/hotspot-filter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -80,13 +86,6 @@ function splitDataLimit(bytes: number): { value: string; unit: "MB" | "GB" } {
   };
 }
 
-function isUnusedVoucher(u: HotspotUser): boolean {
-  if (u.disabled || u.name === "default-trial") return false;
-  const up = u.uptime.trim().toLowerCase();
-  const noUptime = !up || up === "0s" || up === "00:00:00";
-  return noUptime && u.bytesIn === 0 && u.bytesOut === 0;
-}
-
 const PAGE_SIZE = 100;
 
 export function VoucherListClient({
@@ -94,16 +93,29 @@ export function VoucherListClient({
   profiles,
   servers,
   resellers,
+  initialFilters,
 }: {
   users: HotspotUser[];
   profiles: string[];
   servers: string[];
   resellers: ResellerOption[];
+  initialFilters?: {
+    search?: string;
+    profile?: string;
+    comment?: string;
+    usage?: string;
+  };
 }) {
-  const [search, setSearch] = useState("");
-  const [profileFilter, setProfileFilter] = useState("all");
-  const [commentFilter, setCommentFilter] = useState("all");
-  const [usageFilter, setUsageFilter] = useState("all");
+  const [search, setSearch] = useState(initialFilters?.search ?? "");
+  const [profileFilter, setProfileFilter] = useState(
+    initialFilters?.profile || "all"
+  );
+  const [commentFilter, setCommentFilter] = useState(
+    initialFilters?.comment || "all"
+  );
+  const [usageFilter, setUsageFilter] = useState(
+    initialFilters?.usage || "all"
+  );
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -142,28 +154,38 @@ export function VoucherListClient({
     );
   }, [users]);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return users.filter((u) => {
-      if (profileFilter !== "all" && u.profile !== profileFilter) return false;
-      if (commentFilter !== "all" && u.comment.trim() !== commentFilter) {
-        return false;
-      }
-      if (usageFilter === "unused" && !isUnusedVoucher(u)) return false;
-      if (usageFilter === "used" && (isUnusedVoucher(u) || u.disabled)) {
-        return false;
-      }
-      if (usageFilter === "disabled" && !u.disabled) return false;
+  const filtered = useMemo(
+    () =>
+      filterHotspotUsers(users, {
+        search,
+        profile: profileFilter,
+        comment: commentFilter,
+        usage: usageFilter,
+      }),
+    [users, search, profileFilter, commentFilter, usageFilter]
+  );
 
-      if (!q) return true;
-      return (
-        u.name.toLowerCase().includes(q) ||
-        u.profile.toLowerCase().includes(q) ||
-        u.comment.toLowerCase().includes(q) ||
-        u.macAddress.toLowerCase().includes(q)
-      );
-    });
-  }, [users, search, profileFilter, commentFilter, usageFilter]);
+  const printableFiltered = useMemo(
+    () => filtered.filter((u) => u.name !== "default-trial"),
+    [filtered]
+  );
+
+  const printFilteredHref = useMemo(() => {
+    const p = new URLSearchParams();
+    if (search.trim()) p.set("q", search.trim());
+    if (profileFilter !== "all") p.set("profile", profileFilter);
+    if (commentFilter !== "all") p.set("comment", commentFilter);
+    if (usageFilter !== "all") p.set("usage", usageFilter);
+    const qs = p.toString();
+    return qs ? `/print/vouchers/list?${qs}` : "/print/vouchers/list";
+  }, [search, profileFilter, commentFilter, usageFilter]);
+
+  const printSelectedHref = useMemo(() => {
+    if (selectedIds.size === 0) return "";
+    const p = new URLSearchParams();
+    p.set("ids", Array.from(selectedIds).join(","));
+    return `/print/vouchers/list?${p.toString()}`;
+  }, [selectedIds]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -478,16 +500,24 @@ export function VoucherListClient({
 
         <div className="flex flex-wrap items-center gap-2">
           {selectedIds.size > 0 ? (
-            <Button
-              type="button"
-              variant="destructive"
-              size="sm"
-              onClick={handleBulkDeleteSelected}
-              disabled={isPending}
-            >
-              <Trash2 className="size-3.5" />
-              Hapus Terpilih ({selectedIds.size})
-            </Button>
+            <>
+              <Button asChild type="button" variant="outline" size="sm">
+                <Link href={printSelectedHref} target="_blank">
+                  <Printer className="size-3.5" />
+                  Print Terpilih ({selectedIds.size})
+                </Link>
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                onClick={handleBulkDeleteSelected}
+                disabled={isPending}
+              >
+                <Trash2 className="size-3.5" />
+                Hapus Terpilih ({selectedIds.size})
+              </Button>
+            </>
           ) : null}
 
           {commentFilter !== "all" && filtered.length > 0 ? (
@@ -502,6 +532,20 @@ export function VoucherListClient({
               Hapus Comment Ini ({filtered.length})
             </Button>
           ) : null}
+
+          {printableFiltered.length > 0 ? (
+            <Button asChild type="button" variant="outline" size="sm">
+              <Link href={printFilteredHref} target="_blank">
+                <Printer className="size-3.5" />
+                Print PDF ({printableFiltered.length})
+              </Link>
+            </Button>
+          ) : (
+            <Button type="button" variant="outline" size="sm" disabled>
+              <Printer className="size-3.5" />
+              Print PDF (0)
+            </Button>
+          )}
 
           <Button type="button" size="sm" onClick={openAddModal}>
             <Plus className="size-4" />

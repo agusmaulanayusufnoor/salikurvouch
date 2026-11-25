@@ -17,7 +17,17 @@ export const metadata = {
   title: "List Semua Voucher Hotspot",
 };
 
-export default async function VoucherListPage() {
+export default async function VoucherListPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    q?: string;
+    profile?: string;
+    comment?: string;
+    usage?: string;
+  }>;
+}) {
+  const sp = await searchParams;
   let errorMsg: string | null = null;
   let routerName = "MikroTik";
   let users: Awaited<
@@ -110,6 +120,12 @@ export default async function VoucherListPage() {
               profiles={profiles}
               servers={servers}
               resellers={resellers}
+              initialFilters={{
+                search: sp.q ?? "",
+                profile: sp.profile ?? "all",
+                comment: sp.comment ?? "all",
+                usage: sp.usage ?? "all",
+              }}
             />
           )}
         </CardContent>
