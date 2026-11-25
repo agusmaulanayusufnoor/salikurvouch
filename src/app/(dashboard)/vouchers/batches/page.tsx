@@ -60,7 +60,8 @@ export default async function VoucherBatchesPage({
           </h2>
           <p className="text-sm text-muted-foreground">
             Total {totalRows.toLocaleString("id-ID")} batch tersimpan (termasuk
-            arsip migrasi legacy) — siap cetak ulang kartu A4 4 kolom.
+            arsip migrasi legacy) — siap cetak ulang kartu A4 5 kolom (maks.
+            50/halaman).
           </p>
         </div>
         <Button asChild size="sm">

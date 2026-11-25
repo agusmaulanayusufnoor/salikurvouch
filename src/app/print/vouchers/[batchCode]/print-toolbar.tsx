@@ -7,9 +7,11 @@ import { Button } from "@/components/ui/button";
 export function PrintToolbar({
   batchCode,
   count,
+  pageCount,
 }: {
   batchCode: string;
   count: number;
+  pageCount: number;
 }) {
   return (
     <div className="print:hidden sticky top-0 z-20 mb-4 flex flex-wrap items-center justify-between gap-3 border-b bg-white px-4 py-3 shadow-xs">
@@ -25,7 +27,8 @@ export function PrintToolbar({
             {batchCode}
           </p>
           <p className="text-xs text-slate-500">
-            {count} kartu voucher • Format A4 Portrait 4 kolom (QR lokal)
+            {count} kartu voucher • {Math.max(1, pageCount)} halaman A4 Portrait
+            (5 kolom × 10 baris, maks. 50/halaman)
           </p>
         </div>
       </div>

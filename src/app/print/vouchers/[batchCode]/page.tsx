@@ -2,12 +2,18 @@ import { notFound, redirect } from "next/navigation";
 import { getAuthenticatedStaff } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { formatIDR } from "@/lib/utils";
-import {
-  buildHotspotLoginUrl,
-  formatUptimeLabel,
-  generateQrDataUrl,
-} from "@/lib/voucher-generator";
+import { formatUptimeLabel } from "@/lib/voucher-generator";
 import { PrintToolbar } from "./print-toolbar";
+
+const VOUCHERS_PER_PAGE = 50; // 5 columns x 10 rows per A4 portrait page
+
+function chunkArray<T>(items: T[], size: number): T[][] {
+  const pages: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    pages.push(items.slice(i, i + size));
+  }
+  return pages;
+}
 
 function getPriceBadgeColor(price: number, customColor?: string | null): string {
   if (
@@ -52,134 +58,160 @@ export default async function PrintVouchersPage({
 
   const voucherList = vouchers ?? [];
 
-  // Generate all QR Codes locally on server (zero external API dependency!)
-  const cards = await Promise.all(
-    voucherList.map(async (v, index) => {
-      const dns = v.dns_name || "wifi.salikur.net";
-      const loginUrl = buildHotspotLoginUrl(dns, v.username, v.password);
-      const qrDataUrl = await generateQrDataUrl(loginUrl, "#0f172a");
-      const badgeColor = getPriceBadgeColor(Number(v.price), v.card_color);
-      return {
-        num: index + 1,
-        username: v.username,
-        password: v.password,
-        loginType: v.login_type,
-        profile: v.profile || batch.package_name,
-        price: Number(v.price),
-        uptimeLabel: formatUptimeLabel(v.time_limit),
-        quotaLabel: v.data_limit_label || "Unlimited",
-        dns,
-        badgeColor,
-        qrDataUrl,
-      };
-    })
-  );
+  const cards = voucherList.map((v, index) => {
+    const dns = v.dns_name || "wifi.salikur.net";
+    const badgeColor = getPriceBadgeColor(Number(v.price), v.card_color);
+    return {
+      num: index + 1,
+      username: v.username,
+      password: v.password,
+      loginType: v.login_type,
+      profile: v.profile || batch.package_name,
+      price: Number(v.price),
+      uptimeLabel: formatUptimeLabel(v.time_limit),
+      quotaLabel: v.data_limit_label || "Unlimited",
+      dns,
+      badgeColor,
+    };
+  });
+
+  const pages = chunkArray(cards, VOUCHERS_PER_PAGE);
 
   return (
-    <div className="min-h-screen bg-slate-100 pb-10 text-slate-900 print:bg-white print:pb-0">
+    <div className="min-h-screen bg-slate-100 pb-10 text-slate-900 print:min-h-0 print:bg-white print:pb-0">
       <style>{`
         @page {
           size: A4 portrait;
-          margin: 6mm;
+          margin: 5mm;
         }
         @media print {
+          html,
           body {
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
             background: white !important;
+            margin: 0 !important;
+            padding: 0 !important;
           }
+          .voucher-a4-page {
+            width: 100% !important;
+            max-width: none !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            box-shadow: none !important;
+            break-inside: avoid;
+          }
+          .voucher-a4-page-break {
+            break-after: page;
+            page-break-after: always;
+          }
+        }
+        .voucher-a4-grid {
+          display: grid;
+          grid-template-columns: repeat(5, minmax(0, 1fr));
+          grid-auto-rows: 26.5mm;
+          gap: 1.8mm;
         }
       `}</style>
 
-      <PrintToolbar batchCode={batch.batch_code} count={cards.length} />
+      <PrintToolbar
+        batchCode={batch.batch_code}
+        count={cards.length}
+        pageCount={pages.length}
+      />
 
-      <div className="mx-auto max-w-[210mm] bg-white p-3 shadow-sm print:max-w-none print:p-0 print:shadow-none">
-        {cards.length === 0 ? (
+      {cards.length === 0 ? (
+        <div className="mx-auto max-w-[210mm] bg-white p-6 shadow-sm print:max-w-none print:shadow-none">
           <p className="py-12 text-center text-sm text-slate-500">
             Tidak ada kode voucher dalam batch ini.
           </p>
-        ) : (
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 print:grid-cols-4">
-            {cards.map((card) => (
-              <div
-                key={`${card.num}-${card.username}`}
-                className="flex break-inside-avoid flex-col justify-between overflow-hidden rounded-md border border-slate-300 bg-white text-[10px]"
+        </div>
+      ) : (
+        <div className="space-y-6 print:space-y-0">
+          {pages.map((pageCards, pageIdx) => {
+            const isLastPage = pageIdx === pages.length - 1;
+            return (
+              <section
+                key={`page-${pageIdx + 1}`}
+                className={`voucher-a4-page mx-auto w-[210mm] max-w-full bg-white p-[5mm] shadow-sm ${
+                  !isLastPage ? "voucher-a4-page-break" : ""
+                }`}
               >
-                {/* Header strip */}
-                <div
-                  className="flex items-center justify-between px-2 py-1 text-white"
-                  style={{ backgroundColor: card.badgeColor }}
-                >
-                  <span className="font-bold tracking-tight">
-                    SalikurNet
-                  </span>
-                  <span className="rounded bg-black/25 px-1.5 py-0.5 font-mono text-[10px] font-bold">
-                    {formatIDR(card.price)}
-                  </span>
-                </div>
+                <div className="voucher-a4-grid">
+                  {pageCards.map((card) => (
+                    <div
+                      key={`${card.num}-${card.username}`}
+                      className="flex h-full break-inside-avoid flex-col justify-between overflow-hidden rounded border border-slate-300 bg-white leading-tight"
+                    >
+                      {/* Header strip */}
+                      <div
+                        className="flex items-center justify-between gap-1 px-1.5 py-[2px] text-white"
+                        style={{ backgroundColor: card.badgeColor }}
+                      >
+                        <span className="truncate text-[8.5px] font-bold tracking-tight">
+                          SalikurNet
+                        </span>
+                        <span className="shrink-0 rounded bg-black/25 px-1 py-[1px] font-mono text-[8px] font-bold">
+                          {formatIDR(card.price)}
+                        </span>
+                      </div>
 
-                {/* Body */}
-                <div className="flex items-center gap-1.5 p-2">
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <div className="flex items-center justify-between text-[9px] text-slate-500">
-                      <span>[{card.num}]</span>
-                      <span className="truncate font-medium text-slate-700">
-                        {card.uptimeLabel}
-                      </span>
+                      {/* Body (compact, without QR Code) */}
+                      <div className="flex flex-1 flex-col justify-center gap-0.5 px-1.5 py-0.5">
+                        <div className="flex items-center justify-between text-[7.5px] text-slate-500">
+                          <span>[{card.num}]</span>
+                          <span className="truncate font-medium text-slate-700">
+                            {card.uptimeLabel}
+                          </span>
+                        </div>
+
+                        {card.loginType === "vc" ||
+                        card.username === card.password ? (
+                          <div className="rounded border border-dashed border-slate-400 bg-slate-50 px-1 py-[2px] text-center">
+                            <p className="text-[6.5px] uppercase tracking-wider text-slate-500">
+                              Kode Voucher
+                            </p>
+                            <p className="truncate font-mono text-[12px] font-extrabold tracking-wide text-slate-900">
+                              {card.username}
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="rounded border border-dashed border-slate-400 bg-slate-50 px-1 py-[2px] font-mono text-[8.5px]">
+                            <p className="truncate">
+                              <span className="text-slate-500">U:</span>{" "}
+                              <strong className="text-slate-900">
+                                {card.username}
+                              </strong>
+                            </p>
+                            <p className="truncate">
+                              <span className="text-slate-500">P:</span>{" "}
+                              <strong className="text-slate-900">
+                                {card.password}
+                              </strong>
+                            </p>
+                          </div>
+                        )}
+
+                        <p className="truncate text-[7.5px] text-slate-600">
+                          Kuota: <strong>{card.quotaLabel}</strong>
+                        </p>
+                      </div>
+
+                      {/* Footer */}
+                      <div className="flex items-center justify-between gap-1 border-t border-slate-200 bg-slate-50 px-1.5 py-[2px] text-[7px] text-slate-600">
+                        <span className="truncate">{card.dns}</span>
+                        <span className="shrink-0 font-mono font-medium">
+                          {card.profile}
+                        </span>
+                      </div>
                     </div>
-
-                    {card.loginType === "vc" || card.username === card.password ? (
-                      <div className="rounded border border-dashed border-slate-400 bg-slate-50 px-1.5 py-1 text-center">
-                        <p className="text-[8px] uppercase text-slate-500">
-                          Kode Voucher
-                        </p>
-                        <p className="font-mono text-sm font-extrabold tracking-wider text-slate-900">
-                          {card.username}
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-0.5 rounded border border-dashed border-slate-400 bg-slate-50 px-1.5 py-1 font-mono text-[10px]">
-                        <p className="truncate">
-                          <span className="text-slate-500">Us:</span>{" "}
-                          <strong className="text-slate-900">
-                            {card.username}
-                          </strong>
-                        </p>
-                        <p className="truncate">
-                          <span className="text-slate-500">Ps:</span>{" "}
-                          <strong className="text-slate-900">
-                            {card.password}
-                          </strong>
-                        </p>
-                      </div>
-                    )}
-
-                    <p className="truncate text-[9px] text-slate-600">
-                      Kuota: <strong>{card.quotaLabel}</strong>
-                    </p>
-                  </div>
-
-                  {/* Locally rendered QR Code */}
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={card.qrDataUrl}
-                    alt={`QR ${card.username}`}
-                    width={62}
-                    height={62}
-                    className="size-[62px] shrink-0 rounded border border-slate-200"
-                  />
+                  ))}
                 </div>
-
-                {/* Footer */}
-                <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-2 py-0.5 text-[8px] text-slate-600">
-                  <span className="truncate">Login: {card.dns}</span>
-                  <span className="font-mono">{card.profile}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+              </section>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

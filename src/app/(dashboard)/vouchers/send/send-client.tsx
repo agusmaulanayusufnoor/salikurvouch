@@ -151,7 +151,8 @@ export function SendVoucherClient({
               <CardTitle>Generate &amp; Kirim Batch Voucher</CardTitle>
               <CardDescription>
                 Membuat 1–100 voucher langsung di MikroTik (ROS v6/v7), menyimpan
-                arsip ke Supabase, dan siap cetak kartu PDF A4 (4 kolom).
+                arsip ke Supabase, dan siap cetak kartu PDF A4 (5 kolom, maks.
+                50/halaman).
               </CardDescription>
             </CardHeader>
             <CardContent>
